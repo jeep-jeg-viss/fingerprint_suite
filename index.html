@@ -1,1201 +1,1720 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Input Test Harness</title>
-    <style>
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-        }
-        
-        body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-            overflow: hidden;
-            background: #f5f5f5;
-        }
-        
-        #captureSurface {
-            position: fixed;
-            top: 0;
-            left: 0;
-            width: 100vw;
-            height: 100vh;
-            cursor: crosshair;
-        }
-        
-        #mouseCanvas {
-            position: fixed;
-            top: 0;
-            left: 0;
-            pointer-events: none;
-            z-index: 10;
-        }
-        
-        #ui {
-            position: fixed;
-            top: 0;
-            left: 0;
-            right: 0;
-            z-index: 100;
-            background: rgba(255,255,255,0.95);
-            padding: 15px;
-            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
-        }
-        
-        #statusBar {
-            display: flex;
-            gap: 20px;
-            align-items: center;
-            flex-wrap: wrap;
-            margin-bottom: 10px;
-        }
-        
-        .status-item {
-            display: flex;
-            align-items: center;
-            gap: 8px;
-            font-size: 14px;
-        }
-        
-        .recording-indicator {
-            width: 12px;
-            height: 12px;
-            border-radius: 50%;
-            background: #ccc;
-        }
-        
-        .recording-indicator.active {
-            background: #e74c3c;
-            animation: pulse 1s infinite;
-        }
-        
-        @keyframes pulse {
-            0%, 100% { opacity: 1; }
-            50% { opacity: 0.5; }
-        }
-        
-        #controls {
-            display: flex;
-            gap: 10px;
-            flex-wrap: wrap;
-        }
-        
-        button {
-            padding: 8px 16px;
-            border: none;
-            border-radius: 4px;
-            background: #3498db;
-            color: white;
-            cursor: pointer;
-            font-size: 13px;
-            transition: background 0.2s;
-        }
-        
-        button:hover {
-            background: #2980b9;
-        }
-        
-        button.active {
-            background: #27ae60;
-        }
-        
-        #openGuide {
-            background: #9b59b6;
-        }
-        
-        #openGuide:hover {
-            background: #8e44ad;
-        }
-        
-        #keyboardPanel {
-            position: fixed;
-            bottom: 20px;
-            right: 20px;
-            background: rgba(255,255,255,0.95);
-            padding: 15px;
-            border-radius: 8px;
-            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
-            min-width: 280px;
-            z-index: 50;
-        }
-        
-        #typedBuffer {
-            min-height: 24px;
-            background: #f8f9fa;
-            padding: 8px;
-            border-radius: 4px;
-            margin-bottom: 10px;
-            font-family: monospace;
-            font-size: 14px;
-            word-break: break-all;
-        }
-        
-        #metrics {
-            display: grid;
-            grid-template-columns: 1fr 1fr;
-            gap: 8px;
-            font-size: 13px;
-        }
-        
-        .metric {
-            display: flex;
-            justify-content: space-between;
-        }
-        
-        .metric-label {
-            color: #666;
-        }
-        
-        .metric-value {
-            font-weight: 600;
-            color: #333;
-        }
-        
-        .click-marker {
-            position: absolute;
-            pointer-events: none;
-            z-index: 20;
-        }
-        
-        #keycapDisplay {
-            position: fixed;
-            bottom: 20px;
-            left: 20px;
-            display: flex;
-            flex-direction: row;
-            gap: 8px;
-            z-index: 50;
-            pointer-events: none;
-        }
-        
-        .keycap {
-            width: 60px;
-            height: 60px;
-            background: linear-gradient(180deg, #f8f9fa 0%, #e9ecef 100%);
-            border: 2px solid #dee2e6;
-            border-radius: 8px;
-            display: flex;
-            flex-direction: column;
-            justify-content: center;
-            align-items: center;
-            box-shadow: 0 4px 6px rgba(0,0,0,0.1), 0 1px 3px rgba(0,0,0,0.08);
-            transition: all 0.1s ease;
-            opacity: 0;
-            transform: translateY(10px);
-        }
-        
-        .keycap.active {
-            opacity: 1;
-            transform: translateY(0);
-        }
-        
-        .keycap.pressed {
-            background: linear-gradient(180deg, #3498db 0%, #2980b9 100%);
-            border-color: #2980b9;
-            transform: translateY(2px);
-            box-shadow: 0 2px 4px rgba(0,0,0,0.2);
-        }
-        
-        .keycap.pressed .key-label {
-            color: white;
-        }
-        
-        .keycap.pressed .key-code {
-            color: rgba(255,255,255,0.7);
-        }
-        
-        .key-label {
-            font-size: 20px;
-            font-weight: 600;
-            color: #2c3e50;
-            line-height: 1;
-        }
-        
-        .key-code {
-            font-size: 9px;
-            color: #7f8c8d;
-            margin-top: 2px;
-            font-family: monospace;
-        }
-        
-        .click-marker circle {
-            fill: none;
-            stroke-width: 2;
-        }
-        
-        .click-marker text {
-            font-size: 10px;
-            fill: white;
-            text-anchor: middle;
-            dominant-baseline: central;
-        }
-        
-        #exportModal {
-            display: none;
-            position: fixed;
-            top: 0;
-            left: 0;
-            right: 0;
-            bottom: 0;
-            background: rgba(0,0,0,0.5);
-            z-index: 200;
-            justify-content: center;
-            align-items: center;
-        }
-        
-        #exportModal.active {
-            display: flex;
-        }
-        
-        #exportContent {
-            background: white;
-            padding: 20px;
-            border-radius: 8px;
-            width: 90%;
-            max-width: 900px;
-            max-height: 85vh;
-            overflow: auto;
-        }
-        
-        #jsonOutput {
-            width: 100%;
-            height: 250px;
-            font-family: monospace;
-            font-size: 12px;
-            padding: 10px;
-            border: 1px solid #ddd;
-            border-radius: 4px;
-            resize: none;
-            margin-top: 15px;
-        }
-        
-        #jsonFormatInfo {
-            background: #f8f9fa;
-            border: 1px solid #dee2e6;
-            border-radius: 6px;
-            margin-bottom: 10px;
-            overflow: hidden;
-        }
-        
-        #jsonFormatHeader {
-            background: #e9ecef;
-            padding: 10px 15px;
-            cursor: pointer;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            font-weight: 600;
-            color: #495057;
-        }
-        
-        #jsonFormatHeader:hover {
-            background: #dee2e6;
-        }
-        
-        #jsonFormatContent {
-            padding: 15px;
-            display: none;
-            font-size: 13px;
-            line-height: 1.6;
-        }
-        
-        #jsonFormatContent.active {
-            display: block;
-        }
-        
-        .format-section {
-            margin-bottom: 15px;
-        }
-        
-        .format-section h4 {
-            color: #2c3e50;
-            margin-bottom: 8px;
-            font-size: 14px;
-        }
-        
-        .format-section pre {
-            background: #f4f4f4;
-            padding: 10px;
-            border-radius: 4px;
-            overflow-x: auto;
-            font-size: 11px;
-            border-left: 3px solid #3498db;
-        }
-        
-        .format-arrow {
-            transition: transform 0.2s;
-        }
-        
-        .format-arrow.active {
-            transform: rotate(90deg);
-        }
-        
-        .export-actions {
-            display: flex;
-            gap: 10px;
-            margin-top: 15px;
-        }
-        
-        h3 {
-            margin-bottom: 15px;
-            font-size: 18px;
-        }
-    </style>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Advanced Anti-Bot Research Harness</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@300;400;500;600&family=IBM+Plex+Sans:wght@300;400;500&display=swap');
+
+  :root {
+    --bg: #080c10;
+    --bg2: #0d1117;
+    --bg3: #161b22;
+    --border: #21262d;
+    --border2: #30363d;
+    --text: #e6edf3;
+    --text2: #8b949e;
+    --text3: #484f58;
+    --green: #3fb950;
+    --green2: #238636;
+    --red: #f85149;
+    --yellow: #d29922;
+    --blue: #58a6ff;
+    --purple: #bc8cff;
+    --orange: #ffa657;
+    --cyan: #39d353;
+    --accent: #1f6feb;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 12px;
+    height: 100vh;
+    overflow: hidden;
+    display: grid;
+    grid-template-rows: 40px 1fr;
+    grid-template-columns: 1fr;
+  }
+
+  /* HEADER */
+  header {
+    background: var(--bg2);
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    padding: 0 16px;
+    gap: 16px;
+    z-index: 100;
+  }
+  .logo {
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--text2);
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+  }
+  .logo span { color: var(--green); }
+  .header-link {
+    margin-left: auto;
+    font-size: 10px;
+    color: var(--text2);
+    text-decoration: none;
+    padding: 4px 8px;
+    border: 1px solid var(--border);
+    border-radius: 3px;
+    transition: all 0.15s;
+  }
+  .header-link:hover {
+    color: var(--blue);
+    border-color: var(--blue);
+    background: var(--bg3);
+  }
+  .header-score {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .score-label { color: var(--text3); font-size: 10px; letter-spacing: 0.1em; }
+  .score-value {
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--green);
+    transition: color 0.3s;
+    min-width: 40px;
+    text-align: right;
+  }
+  .score-value.medium { color: var(--yellow); }
+  .score-value.high { color: var(--red); }
+  .score-bar-wrap {
+    width: 80px;
+    height: 4px;
+    background: var(--bg3);
+    border-radius: 2px;
+    overflow: hidden;
+  }
+  .score-bar {
+    height: 100%;
+    width: 0%;
+    background: var(--green);
+    border-radius: 2px;
+    transition: width 0.4s, background 0.3s;
+  }
+
+  /* MAIN LAYOUT */
+  .workspace {
+    display: grid;
+    grid-template-columns: 220px 1fr 260px;
+    grid-template-rows: 1fr;
+    overflow: hidden;
+  }
+
+  /* SIDEBAR */
+  .sidebar {
+    background: var(--bg2);
+    border-right: 1px solid var(--border);
+    display: flex;
+    flex-direction: column;
+    overflow-y: auto;
+    overflow-x: hidden;
+  }
+  .sidebar::-webkit-scrollbar { width: 4px; }
+  .sidebar::-webkit-scrollbar-track { background: transparent; }
+  .sidebar::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 2px; }
+
+  .section-header {
+    padding: 10px 12px 6px;
+    font-size: 9px;
+    letter-spacing: 0.15em;
+    text-transform: uppercase;
+    color: var(--text3);
+    border-bottom: 1px solid var(--border);
+    font-weight: 600;
+    position: sticky;
+    top: 0;
+    background: var(--bg2);
+    z-index: 10;
+  }
+
+  .metric-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 5px 12px;
+    border-bottom: 1px solid rgba(33,38,45,0.5);
+    min-height: 28px;
+  }
+  .metric-label {
+    color: var(--text2);
+    font-size: 10px;
+    flex: 1;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+  .metric-val {
+    font-size: 10px;
+    font-weight: 500;
+    color: var(--blue);
+    text-align: right;
+    min-width: 60px;
+    white-space: nowrap;
+  }
+  .metric-val.warn { color: var(--yellow); }
+  .metric-val.danger { color: var(--red); }
+  .metric-val.ok { color: var(--green); }
+
+  .signal-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
+    padding: 1px 5px;
+    border-radius: 3px;
+    font-size: 9px;
+    font-weight: 500;
+  }
+  .signal-pill.ok { background: rgba(63,185,80,0.12); color: var(--green); border: 1px solid rgba(63,185,80,0.25); }
+  .signal-pill.warn { background: rgba(210,153,34,0.12); color: var(--yellow); border: 1px solid rgba(210,153,34,0.25); }
+  .signal-pill.danger { background: rgba(248,81,73,0.12); color: var(--red); border: 1px solid rgba(248,81,73,0.25); }
+  .signal-pill::before { content: ''; width: 4px; height: 4px; border-radius: 50%; background: currentColor; }
+
+  /* CANVAS AREA */
+  .canvas-area {
+    position: relative;
+    overflow: hidden;
+    background: var(--bg);
+    background-image:
+      radial-gradient(circle at 20% 80%, rgba(31,111,235,0.03) 0%, transparent 50%),
+      radial-gradient(circle at 80% 20%, rgba(63,185,80,0.02) 0%, transparent 50%);
+  }
+
+  #mouseCanvas {
+    position: absolute;
+    top: 0; left: 0;
+    width: 100%; height: 100%;
+    z-index: 1;
+  }
+
+  .grid-overlay {
+    position: absolute;
+    top: 0; left: 0; width: 100%; height: 100%;
+    background-image:
+      linear-gradient(rgba(33,38,45,0.3) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(33,38,45,0.3) 1px, transparent 1px);
+    background-size: 40px 40px;
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  .crosshair {
+    position: absolute;
+    pointer-events: none;
+    z-index: 5;
+    transform: translate(-50%, -50%);
+    display: none;
+  }
+  .crosshair::before, .crosshair::after {
+    content: '';
+    position: absolute;
+    background: rgba(88,166,255,0.4);
+  }
+  .crosshair::before { width: 1px; height: 16px; left: 50%; top: 50%; transform: translate(-50%,-50%); }
+  .crosshair::after { width: 16px; height: 1px; left: 50%; top: 50%; transform: translate(-50%,-50%); }
+
+  #clickSvg {
+    position: absolute;
+    top: 0; left: 0;
+    width: 100%; height: 100%;
+    z-index: 3;
+    pointer-events: none;
+  }
+
+  /* heatmap overlay */
+  #heatCanvas {
+    position: absolute;
+    top: 0; left: 0;
+    width: 100%; height: 100%;
+    z-index: 2;
+    opacity: 0;
+    transition: opacity 0.3s;
+    pointer-events: none;
+  }
+  #heatCanvas.visible { opacity: 0.6; }
+
+  /* velocity overlay label */
+  .vel-label {
+    position: absolute;
+    bottom: 10px;
+    left: 10px;
+    font-size: 9px;
+    color: var(--text3);
+    z-index: 10;
+    pointer-events: none;
+  }
+
+  /* PANEL TABS */
+  .right-panel {
+    background: var(--bg2);
+    border-left: 1px solid var(--border);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+
+  .tabs {
+    display: flex;
+    border-bottom: 1px solid var(--border);
+    background: var(--bg);
+  }
+  .tab {
+    flex: 1;
+    padding: 8px 4px;
+    font-size: 9px;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    text-align: center;
+    cursor: pointer;
+    color: var(--text3);
+    border-bottom: 2px solid transparent;
+    transition: all 0.15s;
+    user-select: none;
+  }
+  .tab:hover { color: var(--text2); }
+  .tab.active { color: var(--blue); border-bottom-color: var(--blue); }
+
+  .tab-content {
+    display: none;
+    flex: 1;
+    overflow-y: auto;
+    overflow-x: hidden;
+  }
+  .tab-content.active { display: flex; flex-direction: column; }
+  .tab-content::-webkit-scrollbar { width: 4px; }
+  .tab-content::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 2px; }
+
+  /* EVENT LOG */
+  .log-entry {
+    padding: 4px 10px;
+    border-bottom: 1px solid rgba(33,38,45,0.4);
+    font-size: 9px;
+    color: var(--text2);
+    display: flex;
+    gap: 6px;
+    align-items: flex-start;
+  }
+  .log-time { color: var(--text3); min-width: 46px; }
+  .log-type { min-width: 50px; }
+  .log-type.mouse { color: var(--blue); }
+  .log-type.key { color: var(--purple); }
+  .log-type.net { color: var(--orange); }
+  .log-type.score { color: var(--yellow); }
+  .log-type.danger { color: var(--red); }
+  .log-body { color: var(--text); word-break: break-all; }
+
+  /* NETWORK PANEL */
+  .net-section { padding: 8px 10px; border-bottom: 1px solid var(--border); }
+  .net-title { font-size: 9px; letter-spacing: 0.12em; text-transform: uppercase; color: var(--text3); margin-bottom: 6px; font-weight: 600; }
+  .timing-bar-row { margin-bottom: 4px; }
+  .timing-bar-label { display: flex; justify-content: space-between; font-size: 9px; color: var(--text2); margin-bottom: 2px; }
+  .timing-bar-track { height: 6px; background: var(--bg3); border-radius: 3px; overflow: hidden; }
+  .timing-bar-fill { height: 100%; border-radius: 3px; transition: width 0.5s; }
+
+  /* EXPORT */
+  .export-area { padding: 10px; }
+  .btn {
+    display: block;
+    width: 100%;
+    padding: 7px 10px;
+    background: var(--bg3);
+    border: 1px solid var(--border2);
+    color: var(--text);
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 10px;
+    cursor: pointer;
+    border-radius: 4px;
+    margin-bottom: 6px;
+    text-align: left;
+    transition: all 0.15s;
+    letter-spacing: 0.05em;
+  }
+  .btn:hover { background: var(--border); border-color: var(--accent); color: var(--blue); }
+  .btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+  .btn.primary:hover { background: #388bfd; }
+  .btn.danger-btn { border-color: rgba(248,81,73,0.3); color: var(--red); }
+  .btn.danger-btn:hover { background: rgba(248,81,73,0.1); }
+
+  /* ANOMALY ALERTS */
+  .anomaly-list { padding: 6px; }
+  .anomaly-item {
+    padding: 6px 8px;
+    border-radius: 4px;
+    margin-bottom: 4px;
+    font-size: 9px;
+    border-left: 3px solid;
+    background: var(--bg);
+  }
+  .anomaly-item.high { border-color: var(--red); }
+  .anomaly-item.medium { border-color: var(--yellow); }
+  .anomaly-item.low { border-color: var(--blue); }
+  .anomaly-title { font-weight: 600; margin-bottom: 2px; }
+  .anomaly-item.high .anomaly-title { color: var(--red); }
+  .anomaly-item.medium .anomaly-title { color: var(--yellow); }
+  .anomaly-item.low .anomaly-title { color: var(--blue); }
+  .anomaly-desc { color: var(--text2); line-height: 1.5; }
+
+  /* KEYBOARD VIZ */
+  .keyboard-viz {
+    padding: 8px;
+    border-bottom: 1px solid var(--border);
+  }
+  .key-heatmap-row {
+    display: flex;
+    gap: 2px;
+    justify-content: center;
+    margin-bottom: 2px;
+  }
+  .key-cell {
+    width: 16px;
+    height: 16px;
+    border-radius: 2px;
+    background: var(--bg3);
+    border: 1px solid var(--border);
+    font-size: 7px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--text3);
+    transition: background 0.3s, color 0.3s;
+  }
+  .key-cell.active { background: var(--purple); color: #fff; border-color: var(--purple); }
+
+  /* SPARKLINE */
+  .sparkline-wrap { padding: 6px 10px; border-bottom: 1px solid var(--border); }
+  .sparkline-title { font-size: 9px; color: var(--text3); margin-bottom: 4px; letter-spacing: 0.1em; }
+  canvas.sparkline { width: 100%; height: 36px; display: block; }
+
+  /* STATUS */
+  .status-bar {
+    position: absolute;
+    bottom: 0; left: 0; right: 0;
+    height: 24px;
+    background: rgba(13,17,23,0.9);
+    border-top: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    padding: 0 10px;
+    gap: 16px;
+    z-index: 20;
+    backdrop-filter: blur(4px);
+  }
+  .status-item { font-size: 9px; color: var(--text3); display: flex; align-items: center; gap: 4px; }
+  .status-item span { color: var(--text2); }
+  .rec-dot {
+    width: 5px; height: 5px; border-radius: 50%;
+    background: var(--red);
+    animation: pulse 1s infinite;
+  }
+  @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.3} }
+
+  /* TOOLTIP */
+  .tooltip {
+    position: absolute;
+    background: var(--bg3);
+    border: 1px solid var(--border2);
+    padding: 4px 8px;
+    border-radius: 4px;
+    font-size: 9px;
+    color: var(--text);
+    pointer-events: none;
+    z-index: 50;
+    white-space: nowrap;
+    display: none;
+  }
+
+  /* Replay */
+  .replay-controls {
+    display: flex;
+    gap: 4px;
+    padding: 6px 10px;
+    border-bottom: 1px solid var(--border);
+  }
+  .replay-controls .btn { margin: 0; flex: 1; text-align: center; padding: 5px; }
+  .replay-progress { margin: 0 10px 6px; }
+  .replay-progress input[type=range] {
+    width: 100%;
+    accent-color: var(--blue);
+    cursor: pointer;
+  }
+
+  /* ML export */
+  .feature-vec {
+    padding: 6px 10px;
+    font-size: 9px;
+    color: var(--text2);
+    border-bottom: 1px solid var(--border);
+  }
+  .feature-vec .key { color: var(--text3); }
+  .feature-vec .val { color: var(--cyan); }
+
+  .no-data {
+    padding: 20px;
+    text-align: center;
+    color: var(--text3);
+    font-size: 10px;
+  }
+</style>
 </head>
 <body>
-    <div id="captureSurface"></div>
+
+<header>
+  <div class="logo"><span>▶</span> Anti-Bot Research Harness <span style="color:var(--text3)">v2.0</span></div>
+  <a href="simple-input.html" class="header-link">Simple Input</a>
+  <div class="header-score">
+    <span class="score-label">BOT RISK</span>
+    <div class="score-bar-wrap"><div class="score-bar" id="scoreBar"></div></div>
+    <span class="score-value" id="scoreValue">0%</span>
+  </div>
+</header>
+
+<div class="workspace">
+
+  <!-- LEFT SIDEBAR: LIVE METRICS -->
+  <div class="sidebar" id="sidebar">
+
+    <div class="section-header">Mouse Dynamics</div>
+    <div class="metric-row"><span class="metric-label">Avg Velocity</span><span class="metric-val" id="m-vel">—</span></div>
+    <div class="metric-row"><span class="metric-label">Jitter (σ)</span><span class="metric-val" id="m-jitter">—</span></div>
+    <div class="metric-row"><span class="metric-label">Straightness</span><span class="metric-val" id="m-straight">—</span></div>
+    <div class="metric-row"><span class="metric-label">Overshoot Events</span><span class="metric-val" id="m-over">0</span></div>
+    <div class="metric-row"><span class="metric-label">Pause Count</span><span class="metric-val" id="m-pauses">0</span></div>
+    <div class="metric-row"><span class="metric-label">Micro-tremors</span><span class="metric-val" id="m-tremors">—</span></div>
+    <div class="metric-row"><span class="metric-label">Scroll Bursts</span><span class="metric-val" id="m-scroll">0</span></div>
+    <div class="metric-row"><span class="metric-label">Segments</span><span class="metric-val" id="m-segs">0</span></div>
+
+    <div class="section-header">Keyboard Dynamics</div>
+    <div class="metric-row"><span class="metric-label">WPM</span><span class="metric-val" id="k-wpm">—</span></div>
+    <div class="metric-row"><span class="metric-label">Avg Dwell (ms)</span><span class="metric-val" id="k-dwell">—</span></div>
+    <div class="metric-row"><span class="metric-label">Dwell σ</span><span class="metric-val" id="k-dwellsd">—</span></div>
+    <div class="metric-row"><span class="metric-label">Flight Time (ms)</span><span class="metric-val" id="k-flight">—</span></div>
+    <div class="metric-row"><span class="metric-label">Burst Count</span><span class="metric-val" id="k-bursts">0</span></div>
+    <div class="metric-row"><span class="metric-label">Error Rate</span><span class="metric-val" id="k-errors">—</span></div>
+    <div class="metric-row"><span class="metric-label">Paste Events</span><span class="metric-val" id="k-paste">0</span></div>
+    <div class="metric-row"><span class="metric-label">Keys Pressed</span><span class="metric-val" id="k-total">0</span></div>
+
+    <div class="section-header">Network Signals</div>
+    <div class="metric-row"><span class="metric-label">Nav RTT</span><span class="metric-val" id="n-rtt">—</span></div>
+    <div class="metric-row"><span class="metric-label">DNS Time</span><span class="metric-val" id="n-dns">—</span></div>
+    <div class="metric-row"><span class="metric-label">TCP Handshake</span><span class="metric-val" id="n-tcp">—</span></div>
+    <div class="metric-row"><span class="metric-label">TLS Time</span><span class="metric-val" id="n-tls">—</span></div>
+    <div class="metric-row"><span class="metric-label">TTFB</span><span class="metric-val" id="n-ttfb">—</span></div>
+    <div class="metric-row"><span class="metric-label">Connection Type</span><span class="metric-val" id="n-conntype">—</span></div>
+    <div class="metric-row"><span class="metric-label">Downlink (Mbps)</span><span class="metric-val" id="n-downlink">—</span></div>
+    <div class="metric-row"><span class="metric-label">RTT Jitter</span><span class="metric-val" id="n-rttjitter">—</span></div>
+    <div class="metric-row"><span class="metric-label">WebRTC RTT</span><span class="metric-val" id="n-webrtc">—</span></div>
+    <div class="metric-row"><span class="metric-label">IP:Port Leaked</span><span class="metric-val" id="n-ip">—</span></div>
+
+    <div class="section-header">Environment</div>
+    <div class="metric-row"><span class="metric-label">Headless Signal</span><span class="metric-val" id="e-headless">—</span></div>
+    <div class="metric-row"><span class="metric-label">DevTools Open</span><span class="metric-val" id="e-devtools">—</span></div>
+    <div class="metric-row"><span class="metric-label">Hardware Concur.</span><span class="metric-val" id="e-hw">—</span></div>
+    <div class="metric-row"><span class="metric-label">Device Memory</span><span class="metric-val" id="e-mem">—</span></div>
+    <div class="metric-row"><span class="metric-label">Touch Support</span><span class="metric-val" id="e-touch">—</span></div>
+    <div class="metric-row"><span class="metric-label">Plugins Count</span><span class="metric-val" id="e-plugins">—</span></div>
+    <div class="metric-row"><span class="metric-label">WebGL Vendor</span><span class="metric-val" id="e-webgl">—</span></div>
+    <div class="metric-row"><span class="metric-label">Screen/Window Δ</span><span class="metric-val" id="e-screen">—</span></div>
+    <div class="metric-row"><span class="metric-label">Tab Visibility</span><span class="metric-val" id="e-vis">—</span></div>
+    <div class="metric-row"><span class="metric-label">Clock Skew (ms)</span><span class="metric-val" id="e-clock">—</span></div>
+
+    <div class="section-header">Session</div>
+    <div class="metric-row"><span class="metric-label">Duration</span><span class="metric-val" id="s-dur">0s</span></div>
+    <div class="metric-row"><span class="metric-label">Idle Periods</span><span class="metric-val" id="s-idle">0</span></div>
+    <div class="metric-row"><span class="metric-label">Tab Switches</span><span class="metric-val" id="s-tabs">0</span></div>
+    <div class="metric-row"><span class="metric-label">First Interaction</span><span class="metric-val" id="s-first">—</span></div>
+    <div class="metric-row"><span class="metric-label">Focus Events</span><span class="metric-val" id="s-focus">0</span></div>
+    <div class="metric-row"><span class="metric-label">Events/sec</span><span class="metric-val" id="s-eps">0</span></div>
+
+  </div>
+
+  <!-- CENTER: CANVAS -->
+  <div class="canvas-area" id="canvasArea">
+    <div class="grid-overlay"></div>
     <canvas id="mouseCanvas"></canvas>
-    
-    <div id="ui">
-        <div id="statusBar">
-            <div class="status-item">
-                <div class="recording-indicator active" id="recordingIndicator"></div>
-                <span id="recordingStatus">Recording: ON</span>
-            </div>
-            <div class="status-item">
-                <span class="status-label">Last event:</span>
-                <span id="lastEventTime">--</span>
-            </div>
-            <div class="status-item">
-                <span class="status-label">Segment color:</span>
-                <div id="segmentColor" style="width:20px;height:20px;border-radius:4px;background:#3498db;"></div>
-            </div>
-        </div>
-        <div id="controls">
-            <button id="toggleRecording" class="active">Pause Recording</button>
-            <button id="clearCanvas">Clear Canvas</button>
-            <button id="togglePath" class="active">Hide Path</button>
-            <button id="toggleClicks" class="active">Hide Clicks</button>
-            <button id="toggleKeyboard" class="active">Hide Keyboard Panel</button>
-            <button id="exportJSON">Export JSON</button>
-            <button id="exportScreenshot">Export Screenshot</button>
-            <button id="openGuide" onclick="window.open('guide.html', '_blank')">Guide</button>
-        </div>
+    <canvas id="heatCanvas"></canvas>
+    <svg id="clickSvg"></svg>
+    <div class="crosshair" id="crosshair"></div>
+    <div class="vel-label" id="velLabel">MOVE MOUSE TO BEGIN CAPTURE</div>
+    <div class="status-bar">
+      <div class="status-item"><div class="rec-dot"></div> <span>RECORDING</span></div>
+      <div class="status-item">POS <span id="sb-pos">—</span></div>
+      <div class="status-item">VEL <span id="sb-vel">—</span></div>
+      <div class="status-item">SEG <span id="sb-seg">—</span></div>
+      <div class="status-item">EVENTS <span id="sb-events">0</span></div>
     </div>
-    
-    <div id="keyboardPanel">
-        <h4>Typed Buffer</h4>
-        <div id="typedBuffer"></div>
-        <div id="metrics">
-            <div class="metric">
-                <span class="metric-label">Characters:</span>
-                <span class="metric-value" id="charCount">0</span>
-            </div>
-            <div class="metric">
-                <span class="metric-label">Duration:</span>
-                <span class="metric-value" id="typingDuration">0s</span>
-            </div>
-            <div class="metric">
-                <span class="metric-label">CPS:</span>
-                <span class="metric-value" id="cps">0</span>
-            </div>
-            <div class="metric">
-                <span class="metric-label">WPM:</span>
-                <span class="metric-value" id="wpm">0</span>
-            </div>
-        </div>
-    </div>
-    
-    <svg id="clickMarkers" style="position:fixed;top:0;left:0;width:100%;height:100%;pointer-events:none;z-index:20;">
-    </svg>
-    
-    <div id="keycapDisplay"></div>
-    
-    <div id="exportModal">
-        <div id="exportContent">
-            <h3>Export JSON</h3>
-            
-            <div id="jsonFormatInfo">
-                <div id="jsonFormatHeader">
-                    <span>JSON Format Documentation</span>
-                    <span class="format-arrow" id="formatArrow">▶</span>
-                </div>
-                <div id="jsonFormatContent">
-                    <div class="format-section">
-                        <h4>metadata</h4>
-                        <pre>{
-  "startTime": "ISO timestamp when session started",
-  "endTime": "ISO timestamp when session ended", 
-  "devicePixelRatio": 1,
-  "viewport": { "width": 1920, "height": 1080 }
-}</pre>
-                    </div>
-                    
-                    <div class="format-section">
-                        <h4>mouseSegments[]</h4>
-                        <p>Continuous mouse movements segmented by pauses (250ms threshold).</p>
-                        <pre>{
-  "id": 0,
-  "color": "#3498db",
-  "startTime": 0,    // ms from session start
-  "endTime": 1250,
-  "points": [
-    { "x": 100, "y": 200, "t": 0 },
-    { "x": 150, "y": 250, "t": 16 }  // t = timestamp in ms
-  ]
-}</pre>
-                    </div>
-                    
-                    <div class="format-section">
-                        <h4>clicks[]</h4>
-                        <pre>{
-  "button": "left|middle|right",
-  "x": 250,
-  "y": 300,
-  "t": 5000,         // timestamp in ms
-  "segmentId": 2,    // which segment this click belongs to
-  "target": "DIV"    // HTML element tag
-}</pre>
-                    </div>
-                    
-                    <div class="format-section">
-                        <h4>keyboard.keyEvents[]</h4>
-                        <pre>{
-  "type": "keydown|keyup",
-  "key": "a",
-  "code": "KeyA",
-  "t": 3000
-}</pre>
-                    </div>
-                    
-                    <div class="format-section">
-                        <h4>keyboard.typingMetrics</h4>
-                        <pre>{
-  "chars": 42,
-  "durationMs": 15000,
-  "cps": 2.8,        // characters per second
-  "wpm": 33,         // words per minute (5 chars = 1 word)
-  "perKeyTiming": [
-    { "code": "KeyA", "keydown": 3000, "keyup": 3100, "dwell": 100 }
-  ]
-}</pre>
-                    </div>
-                    
-                    <div class="format-section">
-                        <h4>keyboard.typedBuffer</h4>
-                        <p>Plain text string of all printable characters typed.</p>
-                    </div>
-                </div>
-            </div>
-            
-            <textarea id="jsonOutput" readonly></textarea>
-            <div class="export-actions">
-                <button id="copyJSON">Copy to Clipboard</button>
-                <button id="downloadJSON">Download JSON</button>
-                <button id="closeModal">Close</button>
-            </div>
-        </div>
+    <div class="tooltip" id="tooltip"></div>
+  </div>
+
+  <!-- RIGHT PANEL -->
+  <div class="right-panel">
+    <div class="tabs">
+      <div class="tab active" onclick="switchTab('anomaly')">Anomalies</div>
+      <div class="tab" onclick="switchTab('network')">Network</div>
+      <div class="tab" onclick="switchTab('replay')">Replay</div>
+      <div class="tab" onclick="switchTab('export')">Export</div>
     </div>
 
-    <script>
-        // Configuration
-        const SEGMENT_TIMEOUT = 250; // ms
-        const PALETTE = [
-            '#3498db', '#e74c3c', '#2ecc71', '#f39c12', 
-            '#9b59b6', '#1abc9c', '#e67e22', '#34495e'
-        ];
-        
-        // State
-        let isRecording = true;
-        let sessionStartTime = performance.now();
-        let lastEventTime = sessionStartTime;
-        let currentSegmentIndex = 0;
-        let currentSegment = null;
-        let segments = [];
-        let clicks = [];
-        let keyEvents = [];
-        let typedBuffer = '';
-        let typingStartTime = null;
-        let typingEndTime = null;
-        let keyTimings = {}; // Track keydown timestamps
-        let showPath = true;
-        let showClicks = true;
-        let showKeyboard = true;
-        let segmentTimeoutId = null;
-        
-        // DOM Elements
-        const captureSurface = document.getElementById('captureSurface');
-        const canvas = document.getElementById('mouseCanvas');
-        const ctx = canvas.getContext('2d');
-        const clickMarkersSvg = document.getElementById('clickMarkers');
-        const recordingIndicator = document.getElementById('recordingIndicator');
-        const recordingStatus = document.getElementById('recordingStatus');
-        const lastEventTimeEl = document.getElementById('lastEventTime');
-        const segmentColorEl = document.getElementById('segmentColor');
-        const typedBufferEl = document.getElementById('typedBuffer');
-        const charCountEl = document.getElementById('charCount');
-        const typingDurationEl = document.getElementById('typingDuration');
-        const cpsEl = document.getElementById('cps');
-        const wpmEl = document.getElementById('wpm');
-        
-        // Setup canvas
-        function resizeCanvas() {
-            canvas.width = window.innerWidth;
-            canvas.height = window.innerHeight;
-            redrawCanvas();
+    <!-- ANOMALY TAB -->
+    <div class="tab-content active" id="tab-anomaly">
+      <div class="sparkline-wrap">
+        <div class="sparkline-title">RISK SCORE OVER TIME</div>
+        <canvas class="sparkline" id="scoreSparkline" width="240" height="36"></canvas>
+      </div>
+      <div class="keyboard-viz" id="keyViz"></div>
+      <div class="anomaly-list" id="anomalyList">
+        <div class="no-data">No anomalies detected yet.<br>Interact with the canvas.</div>
+      </div>
+    </div>
+
+    <!-- NETWORK TAB -->
+    <div class="tab-content" id="tab-network">
+      <div class="net-section">
+        <div class="net-title">Navigation Timing Breakdown</div>
+        <div class="timing-bar-row" id="nb-dns">
+          <div class="timing-bar-label"><span>DNS Lookup</span><span id="nv-dns">—</span></div>
+          <div class="timing-bar-track"><div class="timing-bar-fill" id="nb-dns-fill" style="background:var(--blue);width:0%"></div></div>
+        </div>
+        <div class="timing-bar-row">
+          <div class="timing-bar-label"><span>TCP Connect</span><span id="nv-tcp">—</span></div>
+          <div class="timing-bar-track"><div class="timing-bar-fill" id="nb-tcp-fill" style="background:var(--green);width:0%"></div></div>
+        </div>
+        <div class="timing-bar-row">
+          <div class="timing-bar-label"><span>TLS Handshake</span><span id="nv-tls">—</span></div>
+          <div class="timing-bar-track"><div class="timing-bar-fill" id="nb-tls-fill" style="background:var(--purple);width:0%"></div></div>
+        </div>
+        <div class="timing-bar-row">
+          <div class="timing-bar-label"><span>TTFB</span><span id="nv-ttfb">—</span></div>
+          <div class="timing-bar-track"><div class="timing-bar-fill" id="nb-ttfb-fill" style="background:var(--orange);width:0%"></div></div>
+        </div>
+        <div class="timing-bar-row">
+          <div class="timing-bar-label"><span>Page Load</span><span id="nv-load">—</span></div>
+          <div class="timing-bar-track"><div class="timing-bar-fill" id="nb-load-fill" style="background:var(--yellow);width:0%"></div></div>
+        </div>
+      </div>
+      <div class="net-section">
+        <div class="net-title">Resource Timing (latest 5)</div>
+        <div id="res-timing-list"><div class="no-data">Loading...</div></div>
+      </div>
+      <div class="net-section">
+        <div class="net-title">WebRTC Probe</div>
+        <div class="metric-row"><span class="metric-label">Local IP</span><span class="metric-val" id="rtc-local">probing...</span></div>
+        <div class="metric-row"><span class="metric-label">ICE RTT</span><span class="metric-val" id="rtc-rtt">—</span></div>
+        <div class="metric-row"><span class="metric-label">Candidate Type</span><span class="metric-val" id="rtc-type">—</span></div>
+      </div>
+      <div class="net-section">
+        <div class="net-title">Connection Profile</div>
+        <div id="conn-profile">
+          <div class="metric-row"><span class="metric-label">effectiveType</span><span class="metric-val" id="cp-type">—</span></div>
+          <div class="metric-row"><span class="metric-label">RTT estimate</span><span class="metric-val" id="cp-rtt">—</span></div>
+          <div class="metric-row"><span class="metric-label">Downlink</span><span class="metric-val" id="cp-dl">—</span></div>
+          <div class="metric-row"><span class="metric-label">Save-Data</span><span class="metric-val" id="cp-save">—</span></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- REPLAY TAB -->
+    <div class="tab-content" id="tab-replay">
+      <div class="replay-controls">
+        <button class="btn" id="replayBtn" onclick="startReplay()">▶ Play</button>
+        <button class="btn" onclick="stopReplay()">■ Stop</button>
+        <button class="btn" onclick="clearAll()">✕ Clear</button>
+      </div>
+      <div class="replay-progress">
+        <input type="range" id="replaySlider" min="0" max="100" value="0" style="width:100%">
+      </div>
+      <div class="metric-row"><span class="metric-label">Replay Time</span><span class="metric-val" id="replay-time">—</span></div>
+      <div class="metric-row"><span class="metric-label">Replay Speed</span>
+        <select id="replaySpeed" style="background:var(--bg3);border:1px solid var(--border2);color:var(--text);font-family:inherit;font-size:10px;padding:2px 4px;border-radius:3px;">
+          <option value="0.5">0.5x</option>
+          <option value="1" selected>1x</option>
+          <option value="2">2x</option>
+          <option value="4">4x</option>
+        </select>
+      </div>
+      <div class="sparkline-wrap">
+        <div class="sparkline-title">VELOCITY OVER TIME</div>
+        <canvas class="sparkline" id="velSparkline" width="240" height="36"></canvas>
+      </div>
+      <div class="sparkline-wrap">
+        <div class="sparkline-title">KEYSTROKE FLIGHT TIME</div>
+        <canvas class="sparkline" id="flightSparkline" width="240" height="36"></canvas>
+      </div>
+      <div style="padding:10px;">
+        <div style="font-size:9px;color:var(--text3);margin-bottom:6px;letter-spacing:0.1em;">HEATMAP OVERLAY</div>
+        <button class="btn" onclick="toggleHeatmap()">Toggle Velocity Heatmap</button>
+      </div>
+    </div>
+
+    <!-- EXPORT TAB -->
+    <div class="tab-content" id="tab-export">
+      <div class="export-area">
+        <div style="font-size:9px;color:var(--text3);margin-bottom:8px;letter-spacing:0.1em;">EXPORT FORMAT</div>
+        <button class="btn primary" onclick="exportJSON()">⬇ Export Full JSON</button>
+        <button class="btn" onclick="exportMLVectors()">⬇ Export ML Feature Vectors</button>
+        <button class="btn" onclick="exportCSV()">⬇ Export CSV (mouse points)</button>
+        <button class="btn" onclick="copyScore()">⎘ Copy Risk Score Report</button>
+        <div style="font-size:9px;color:var(--text3);margin:12px 0 6px;letter-spacing:0.1em;">SESSION CONTROL</div>
+        <button class="btn danger-btn" onclick="clearAll()">✕ Clear All Data</button>
+      </div>
+      <div style="padding:0 10px;">
+        <div style="font-size:9px;color:var(--text3);margin-bottom:6px;letter-spacing:0.1em;">ML FEATURE VECTOR PREVIEW</div>
+        <div id="featureVecPreview"></div>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<script>
+// ─── CONFIG ───────────────────────────────────────────────────────────────────
+const SEGMENT_TIMEOUT = 250;
+const PALETTE = ['#58a6ff','#3fb950','#bc8cff','#ffa657','#f85149','#39d353','#d29922','#79c0ff'];
+const IDLE_THRESHOLD = 2000;
+
+// ─── STATE ────────────────────────────────────────────────────────────────────
+const state = {
+  session: { start: performance.now(), firstInteraction: null },
+  mouse: {
+    segments: [], currentSegment: null, segIndex: 0, segTimer: null,
+    allPoints: [], clicks: [], scrollEvents: [],
+    overshootCount: 0, pauseCount: 0, tremors: 0
+  },
+  keyboard: {
+    keyEvents: [], keyDown: {}, dwellTimes: [], flightTimes: [],
+    lastKeyUpTime: null, pasteCount: 0, errorCount: 0, totalChars: 0,
+    bursts: [], currentBurst: [], typedBuffer: ''
+  },
+  network: { navTiming: {}, resources: [], webrtc: {}, connection: {} },
+  environment: {},
+  session_meta: { idlePeriods: 0, tabSwitches: 0, focusEvents: 0, totalEvents: 0 },
+  score: { history: [], current: 0, anomalies: [] },
+  replay: { active: false, timer: null, frame: 0 },
+  heatmap: { data: [], visible: false },
+  velocityHistory: []
+};
+
+// ─── CANVAS SETUP ─────────────────────────────────────────────────────────────
+const canvasArea = document.getElementById('canvasArea');
+const canvas = document.getElementById('mouseCanvas');
+const ctx = canvas.getContext('2d');
+const heatCanvas = document.getElementById('heatCanvas');
+const heatCtx = heatCanvas.getContext('2d');
+const svg = document.getElementById('clickSvg');
+const crosshair = document.getElementById('crosshair');
+
+function resizeCanvases() {
+  const r = canvasArea.getBoundingClientRect();
+  canvas.width = r.width;
+  canvas.height = r.height;
+  heatCanvas.width = r.width;
+  heatCanvas.height = r.height;
+}
+resizeCanvases();
+window.addEventListener('resize', () => { resizeCanvases(); redrawAll(); });
+
+// ─── TIMING ───────────────────────────────────────────────────────────────────
+function now() { return performance.now() - state.session.start; }
+
+// ─── MOUSE TRACKING ───────────────────────────────────────────────────────────
+let lastX = null, lastY = null, lastT = null, lastVel = 0;
+
+canvasArea.addEventListener('mousemove', e => {
+  const rect = canvasArea.getBoundingClientRect();
+  const x = e.clientX - rect.left;
+  const y = e.clientY - rect.top;
+  const t = now();
+
+  if (state.session.firstInteraction === null) state.session.firstInteraction = t;
+
+  state.session_meta.totalEvents++;
+  document.getElementById('velLabel').style.display = 'none';
+
+  // crosshair
+  crosshair.style.display = 'block';
+  crosshair.style.left = x + 'px';
+  crosshair.style.top = y + 'px';
+
+  // velocity
+  let vel = 0;
+  if (lastX !== null) {
+    const dx = x - lastX, dy = y - lastY, dt = t - lastT;
+    if (dt > 0) {
+      vel = Math.sqrt(dx*dx + dy*dy) / dt;
+      state.velocityHistory.push({ t, v: vel });
+      if (state.velocityHistory.length > 500) state.velocityHistory.shift();
+    }
+    // micro-tremor: very small movement at near-zero velocity
+    const dist = Math.sqrt(dx*dx + dy*dy);
+    if (dist > 0.1 && dist < 3 && dt < 50) state.mouse.tremors++;
+  }
+
+  lastX = x; lastY = y; lastT = t; lastVel = vel;
+
+  // segmentation
+  if (!state.mouse.currentSegment) {
+    startSegment(x, y, t);
+  } else {
+    state.mouse.currentSegment.points.push({ x, y, t });
+    drawSegmentLine(x, y);
+  }
+
+  clearTimeout(state.mouse.segTimer);
+  state.mouse.segTimer = setTimeout(() => {
+    endSegment(t);
+    state.mouse.pauseCount++;
+  }, SEGMENT_TIMEOUT);
+
+  // heatmap
+  state.heatmap.data.push({ x: Math.floor(x), y: Math.floor(y), v: vel });
+
+  const point = { x, y, t, v: vel };
+  state.mouse.allPoints.push(point);
+
+  updateStatusBar(x, y, vel);
+  updateMouseMetrics();
+});
+
+canvasArea.addEventListener('mouseleave', () => { crosshair.style.display = 'none'; });
+
+canvasArea.addEventListener('click', e => {
+  const rect = canvasArea.getBoundingClientRect();
+  addClickMarker(e.clientX - rect.left, e.clientY - rect.top, e.button, now());
+});
+canvasArea.addEventListener('contextmenu', e => { e.preventDefault(); });
+canvasArea.addEventListener('mousedown', e => {
+  if (e.button !== 0) {
+    const rect = canvasArea.getBoundingClientRect();
+    addClickMarker(e.clientX - rect.left, e.clientY - rect.top, e.button, now());
+  }
+});
+
+canvasArea.addEventListener('wheel', e => {
+  e.preventDefault();
+  state.mouse.scrollEvents.push({ dy: e.deltaY, t: now() });
+  analyzeScrollBursts();
+}, { passive: false });
+
+function startSegment(x, y, t) {
+  state.mouse.currentSegment = {
+    id: state.mouse.segIndex,
+    color: PALETTE[state.mouse.segIndex % PALETTE.length],
+    startTime: t, points: [{ x, y, t }]
+  };
+}
+
+function endSegment(t) {
+  if (!state.mouse.currentSegment) return;
+  const seg = state.mouse.currentSegment;
+  seg.endTime = t;
+  // compute straightness
+  if (seg.points.length > 1) {
+    const p0 = seg.points[0], pN = seg.points[seg.points.length - 1];
+    const direct = Math.sqrt((pN.x-p0.x)**2 + (pN.y-p0.y)**2);
+    let arcLen = 0;
+    for (let i=1; i<seg.points.length; i++) {
+      const a = seg.points[i-1], b = seg.points[i];
+      arcLen += Math.sqrt((b.x-a.x)**2 + (b.y-a.y)**2);
+    }
+    seg.straightness = arcLen > 0 ? direct / arcLen : 1;
+    // overshoot detection: direction reversal near endpoint
+    detectOvershoot(seg);
+  }
+  state.mouse.segments.push(seg);
+  state.mouse.segIndex++;
+  state.mouse.currentSegment = null;
+}
+
+function detectOvershoot(seg) {
+  if (seg.points.length < 5) return;
+  const n = seg.points.length;
+  const pN = seg.points[n-1];
+  // look at last 20% of points for direction reversal
+  const cutoff = Math.floor(n * 0.8);
+  const ref = seg.points[cutoff];
+  let reversals = 0;
+  for (let i = cutoff + 1; i < n - 1; i++) {
+    const d1x = seg.points[i].x - seg.points[i-1].x;
+    const d2x = seg.points[i+1].x - seg.points[i].x;
+    const d1y = seg.points[i].y - seg.points[i-1].y;
+    const d2y = seg.points[i+1].y - seg.points[i].y;
+    if ((d1x * d2x < 0) || (d1y * d2y < 0)) reversals++;
+  }
+  if (reversals >= 2) state.mouse.overshootCount++;
+}
+
+let prevDrawPoint = null;
+function drawSegmentLine(x, y) {
+  if (!state.mouse.currentSegment || state.mouse.currentSegment.points.length < 2) {
+    prevDrawPoint = { x, y };
+    return;
+  }
+  const pts = state.mouse.currentSegment.points;
+  const prev = pts[pts.length - 2];
+  ctx.beginPath();
+  ctx.moveTo(prev.x, prev.y);
+  ctx.lineTo(x, y);
+  // color by velocity
+  const v = Math.min(lastVel * 5, 1);
+  ctx.strokeStyle = lerpColor('#58a6ff', '#f85149', v);
+  ctx.lineWidth = 1.5;
+  ctx.globalAlpha = 0.7;
+  ctx.stroke();
+  ctx.globalAlpha = 1;
+}
+
+function lerpColor(a, b, t) {
+  const ah = parseInt(a.slice(1),16), bh = parseInt(b.slice(1),16);
+  const ar = ah>>16, ag = (ah>>8)&0xff, ab = ah&0xff;
+  const br = bh>>16, bg = (bh>>8)&0xff, bb = bh&0xff;
+  return '#' + [
+    Math.round(ar + (br-ar)*t),
+    Math.round(ag + (bg-ag)*t),
+    Math.round(ab + (bb-ab)*t)
+  ].map(v => v.toString(16).padStart(2,'0')).join('');
+}
+
+function addClickMarker(x, y, btn, t) {
+  const colors = { 0: '#f85149', 1: '#ffa657', 2: '#58a6ff' };
+  const c = colors[btn] || '#8b949e';
+  const circle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+  circle.setAttribute('cx', x); circle.setAttribute('cy', y);
+  circle.setAttribute('r', 6); circle.setAttribute('fill', 'none');
+  circle.setAttribute('stroke', c); circle.setAttribute('stroke-width', 1.5);
+  circle.setAttribute('opacity', 0.8);
+  const anim = document.createElementNS('http://www.w3.org/2000/svg', 'animate');
+  anim.setAttribute('attributeName', 'r'); anim.setAttribute('from', 6);
+  anim.setAttribute('to', 18); anim.setAttribute('dur', '0.5s'); anim.setAttribute('fill', 'freeze');
+  const anim2 = document.createElementNS('http://www.w3.org/2000/svg', 'animate');
+  anim2.setAttribute('attributeName', 'opacity'); anim2.setAttribute('from', 0.8);
+  anim2.setAttribute('to', 0); anim2.setAttribute('dur', '0.5s'); anim2.setAttribute('fill', 'freeze');
+  circle.appendChild(anim); circle.appendChild(anim2);
+  svg.appendChild(circle);
+  state.mouse.clicks.push({ x, y, button: btn, t });
+  state.session_meta.totalEvents++;
+  setTimeout(() => circle.remove(), 600);
+}
+
+function analyzeScrollBursts() {
+  const s = state.mouse.scrollEvents;
+  if (s.length < 2) return;
+  const last = s[s.length-1], prev = s[s.length-2];
+  // bot scroll: perfectly fixed delta
+  if (last.dy === prev.dy && Math.abs(last.dy) > 0) {
+    // consecutive identical deltas - suspicion
+  }
+  document.getElementById('m-scroll').textContent = s.length;
+}
+
+// ─── KEYBOARD ─────────────────────────────────────────────────────────────────
+document.addEventListener('keydown', e => {
+  const t = now();
+  state.keyboard.keyEvents.push({ type: 'keydown', key: e.key, code: e.code, t });
+  state.keyboard.keyDown[e.code] = t;
+  state.session_meta.totalEvents++;
+
+  // flight time (time from last keyup to this keydown)
+  if (state.keyboard.lastKeyUpTime !== null) {
+    const flight = t - state.keyboard.lastKeyUpTime;
+    state.keyboard.flightTimes.push(flight);
+  }
+
+  if (e.key === 'Backspace') state.keyboard.errorCount++;
+
+  // burst analysis
+  const burst = state.keyboard.currentBurst;
+  if (burst.length === 0 || t - burst[burst.length-1] < 100) {
+    burst.push(t);
+  } else {
+    if (burst.length > 3) state.keyboard.bursts.push([...burst]);
+    state.keyboard.currentBurst = [t];
+  }
+
+  // keyboard viz
+  highlightKey(e.code, true);
+  state.keyboard.totalChars++;
+  updateKeyMetrics();
+});
+
+document.addEventListener('keyup', e => {
+  const t = now();
+  state.keyboard.keyEvents.push({ type: 'keyup', key: e.key, code: e.code, t });
+  const downT = state.keyboard.keyDown[e.code];
+  if (downT !== undefined) {
+    state.keyboard.dwellTimes.push(t - downT);
+    delete state.keyboard.keyDown[e.code];
+  }
+  state.keyboard.lastKeyUpTime = t;
+  highlightKey(e.code, false);
+});
+
+document.addEventListener('paste', () => {
+  state.keyboard.pasteCount++;
+  addAnomalyIfNew('paste', 'high', 'Paste Event Detected', 'Content was pasted. Bots often inject text via clipboard rather than keystroke simulation.');
+});
+
+function highlightKey(code, active) {
+  const el = document.querySelector(`[data-code="${code}"]`);
+  if (el) {
+    el.classList.toggle('active', active);
+  }
+}
+
+// Build keyboard viz
+(function buildKeyboard() {
+  const rows = [
+    ['KeyQ','KeyW','KeyE','KeyR','KeyT','KeyY','KeyU','KeyI','KeyO','KeyP'],
+    ['KeyA','KeyS','KeyD','KeyF','KeyG','KeyH','KeyJ','KeyK','KeyL'],
+    ['KeyZ','KeyX','KeyC','KeyV','KeyB','KeyN','KeyM']
+  ];
+  const labels = {
+    KeyQ:'Q',KeyW:'W',KeyE:'E',KeyR:'R',KeyT:'T',KeyY:'Y',KeyU:'U',KeyI:'I',KeyO:'O',KeyP:'P',
+    KeyA:'A',KeyS:'S',KeyD:'D',KeyF:'F',KeyG:'G',KeyH:'H',KeyJ:'J',KeyK:'K',KeyL:'L',
+    KeyZ:'Z',KeyX:'X',KeyC:'C',KeyV:'V',KeyB:'B',KeyN:'N',KeyM:'M'
+  };
+  const viz = document.getElementById('keyViz');
+  rows.forEach(row => {
+    const rowEl = document.createElement('div');
+    rowEl.className = 'key-heatmap-row';
+    row.forEach(code => {
+      const cell = document.createElement('div');
+      cell.className = 'key-cell';
+      cell.dataset.code = code;
+      cell.textContent = labels[code] || code.replace('Key','');
+      rowEl.appendChild(cell);
+    });
+    viz.appendChild(rowEl);
+  });
+})();
+
+// ─── METRICS UPDATE ───────────────────────────────────────────────────────────
+function mean(arr) { return arr.length ? arr.reduce((a,b)=>a+b,0)/arr.length : 0; }
+function stddev(arr) {
+  if (arr.length < 2) return 0;
+  const m = mean(arr);
+  return Math.sqrt(arr.reduce((s,v)=>(s+(v-m)**2),0)/arr.length);
+}
+
+function updateMouseMetrics() {
+  const vels = state.velocityHistory.map(p => p.v);
+  const avgVel = mean(vels);
+  const jitter = stddev(vels);
+
+  // straightness: average of all finished segments
+  const straights = state.mouse.segments.filter(s => s.straightness !== undefined).map(s => s.straightness);
+  const avgStraight = mean(straights);
+
+  setMetric('m-vel', avgVel > 0 ? avgVel.toFixed(3) + ' px/ms' : '—');
+  setMetric('m-jitter', jitter > 0 ? jitter.toFixed(3) : '—', jitter < 0.1 ? 'warn' : '');
+  setMetric('m-straight', avgStraight > 0 ? (avgStraight * 100).toFixed(1) + '%' : '—', avgStraight > 0.98 ? 'danger' : '');
+  setMetric('m-over', state.mouse.overshootCount, state.mouse.overshootCount === 0 ? 'warn' : '');
+  setMetric('m-pauses', state.mouse.pauseCount);
+  setMetric('m-tremors', state.mouse.tremors, state.mouse.tremors < 5 && state.mouse.allPoints.length > 100 ? 'warn' : '');
+  setMetric('m-segs', state.mouse.segments.length);
+
+  // status bar
+  document.getElementById('sb-pos').textContent = lastX ? `${Math.round(lastX)},${Math.round(lastY)}` : '—';
+  document.getElementById('sb-vel').textContent = lastVel ? lastVel.toFixed(2) + 'px/ms' : '—';
+  document.getElementById('sb-seg').textContent = state.mouse.segIndex;
+  document.getElementById('sb-events').textContent = state.session_meta.totalEvents;
+}
+
+function updateKeyMetrics() {
+  const dwells = state.keyboard.dwellTimes;
+  const flights = state.keyboard.flightTimes;
+  const avgDwell = mean(dwells);
+  const dwellSD = stddev(dwells);
+  const avgFlight = mean(flights);
+  const total = state.keyboard.totalChars;
+  const errors = state.keyboard.errorCount;
+
+  setMetric('k-wpm', total > 5 ? Math.round((total/5) / (now()/1000/60)) + ' wpm' : '—');
+  setMetric('k-dwell', avgDwell > 0 ? avgDwell.toFixed(0) + 'ms' : '—', avgDwell > 0 && avgDwell < 10 ? 'danger' : '');
+  setMetric('k-dwellsd', dwellSD > 0 ? dwellSD.toFixed(1) + 'ms' : '—', dwellSD < 2 && dwells.length > 5 ? 'danger' : '');
+  setMetric('k-flight', avgFlight > 0 ? avgFlight.toFixed(0) + 'ms' : '—');
+  setMetric('k-bursts', state.keyboard.bursts.length);
+  setMetric('k-errors', total > 5 ? (errors/total*100).toFixed(1) + '%' : '—', errors === 0 && total > 20 ? 'warn' : '');
+  setMetric('k-paste', state.keyboard.pasteCount, state.keyboard.pasteCount > 0 ? 'danger' : '');
+  setMetric('k-total', total);
+}
+
+function setMetric(id, val, cls = '') {
+  const el = document.getElementById(id);
+  if (!el) return;
+  el.textContent = val;
+  el.className = 'metric-val' + (cls ? ' ' + cls : '');
+}
+
+// ─── NETWORK FINGERPRINTING ────────────────────────────────────────────────────
+function collectNavTiming() {
+  try {
+    const nav = performance.getEntriesByType('navigation')[0];
+    if (!nav) return;
+    const t = state.network.navTiming;
+    t.dns = nav.domainLookupEnd - nav.domainLookupStart;
+    t.tcp = nav.connectEnd - nav.connectStart;
+    t.tls = nav.requestStart - nav.secureConnectionStart > 0
+      ? nav.requestStart - nav.secureConnectionStart : 0;
+    t.ttfb = nav.responseStart - nav.requestStart;
+    t.load = nav.loadEventEnd - nav.startTime;
+    t.rtt = nav.connectEnd - nav.connectStart;
+
+    setMetric('n-rtt', t.rtt.toFixed(1) + 'ms');
+    setMetric('n-dns', t.dns.toFixed(1) + 'ms');
+    setMetric('n-tcp', t.tcp.toFixed(1) + 'ms');
+    setMetric('n-tls', t.tls.toFixed(1) + 'ms');
+    setMetric('n-ttfb', t.ttfb.toFixed(1) + 'ms');
+
+    // Network tab bars
+    const max = Math.max(t.dns, t.tcp, t.tls, t.ttfb, t.load, 1);
+    function setBar(id, val, label) {
+      const fill = document.getElementById(id);
+      const lbl = document.getElementById(label);
+      if (fill) fill.style.width = Math.min(100, val/max*100) + '%';
+      if (lbl) lbl.textContent = val.toFixed(1) + 'ms';
+    }
+    setBar('nb-dns-fill', t.dns, 'nv-dns');
+    setBar('nb-tcp-fill', t.tcp, 'nv-tcp');
+    setBar('nb-tls-fill', t.tls, 'nv-tls');
+    setBar('nb-ttfb-fill', t.ttfb, 'nv-ttfb');
+    setBar('nb-load-fill', t.load, 'nv-load');
+    document.getElementById('nv-load').textContent = t.load.toFixed(1) + 'ms';
+
+    // Anomaly: unusually low DNS (suggests DNS cache or headless)
+    if (t.dns < 1 && t.dns >= 0) {
+      addAnomalyIfNew('dns-instant', 'medium', 'Instant DNS Resolution',
+        `DNS resolved in ${t.dns.toFixed(2)}ms. Headless browsers & proxies often have pre-cached DNS, bypassing normal resolver latency.`);
+    }
+    // Anomaly: RTT/TLS mismatch suggesting VPN
+    if (t.tls > 0 && t.tcp > 0 && t.tls / t.tcp > 3) {
+      addAnomalyIfNew('tls-tcp-mismatch', 'medium', 'TLS/TCP Ratio Anomaly',
+        `TLS handshake (${t.tls.toFixed(0)}ms) is disproportionately long vs TCP connect (${t.tcp.toFixed(0)}ms). May indicate a proxy adding overhead.`);
+    }
+  } catch(e) {}
+}
+
+function collectResourceTiming() {
+  const entries = performance.getEntriesByType('resource').slice(-5);
+  state.network.resources = entries;
+  const list = document.getElementById('res-timing-list');
+  if (!entries.length) { list.innerHTML = '<div class="no-data">No resources</div>'; return; }
+  list.innerHTML = entries.map(r => {
+    const dns = (r.domainLookupEnd - r.domainLookupStart).toFixed(0);
+    const tcp = (r.connectEnd - r.connectStart).toFixed(0);
+    const ttfb = (r.responseStart - r.requestStart).toFixed(0);
+    const name = r.name.split('/').pop().split('?')[0].slice(0,22);
+    return `<div class="metric-row"><span class="metric-label" title="${r.name}">${name}</span><span class="metric-val">ttfb:${ttfb}ms</span></div>`;
+  }).join('');
+}
+
+function collectConnectionInfo() {
+  const conn = navigator.connection || navigator.mozConnection || navigator.webkitConnection;
+  if (conn) {
+    const c = state.network.connection;
+    c.effectiveType = conn.effectiveType || '—';
+    c.rtt = conn.rtt || '—';
+    c.downlink = conn.downlink || '—';
+    c.saveData = conn.saveData || false;
+
+    setMetric('n-conntype', c.effectiveType);
+    setMetric('n-downlink', c.downlink + ' Mbps');
+    document.getElementById('cp-type').textContent = c.effectiveType;
+    document.getElementById('cp-rtt').textContent = c.rtt + 'ms';
+    document.getElementById('cp-dl').textContent = c.downlink + ' Mbps';
+    document.getElementById('cp-save').textContent = c.saveData ? 'YES' : 'no';
+
+    // suspicious: datacenter-like very low rtt but high-speed downlink
+    if (c.rtt <= 10 && c.downlink >= 10) {
+      addAnomalyIfNew('datacenter-conn', 'medium', 'Datacenter-like Connection Profile',
+        `RTT ${c.rtt}ms with ${c.downlink}Mbps downlink matches a datacenter/VPN profile. Real residential connections typically show higher RTT with asymmetric bandwidth.`);
+    }
+  } else {
+    setMetric('n-conntype', 'API N/A');
+  }
+}
+
+// WebRTC leak probe - gets local IPs
+function probeWebRTC() {
+  try {
+    const pc = new RTCPeerConnection({ iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] });
+    pc.createDataChannel('');
+    pc.createOffer().then(o => pc.setLocalDescription(o)).catch(()=>{});
+    let found = false;
+    pc.onicecandidate = e => {
+      if (!e.candidate) return;
+      const cand = e.candidate.candidate;
+      const ipMatch = cand.match(/([0-9]{1,3}\.){3}[0-9]{1,3}/);
+      if (ipMatch && !found) {
+        found = true;
+        const ip = ipMatch[0];
+        state.network.webrtc.localIP = ip;
+        document.getElementById('rtc-local').textContent = ip;
+        document.getElementById('n-ip').textContent = ip;
+        setMetric('n-ip', ip, ip.startsWith('10.') || ip.startsWith('172.') || ip.startsWith('192.168.') ? 'ok' : 'warn');
+
+        // Check for non-RFC1918 local IP = potentially using a VPN/proxy leak
+        const isPrivate = ip.startsWith('10.') || ip.startsWith('172.1') || ip.startsWith('172.2') ||
+                          ip.startsWith('172.3') || ip.startsWith('192.168.') || ip.startsWith('127.');
+        if (!isPrivate) {
+          addAnomalyIfNew('webrtc-public', 'high', 'WebRTC Leaks Public IP',
+            `WebRTC ICE reveals ${ip} which is a public IP — suggests a VPN misconfiguration or no NAT. Attackers using residential proxies may expose their real IP here.`);
         }
-        
-        window.addEventListener('resize', resizeCanvas);
-        resizeCanvas();
-        
-        // Helper functions
-        function getRelativeTime() {
-            return performance.now() - sessionStartTime;
-        }
-        
-        function formatTime(ms) {
-            return (ms / 1000).toFixed(2) + 's';
-        }
-        
-        function updateStatus() {
-            const now = performance.now();
-            const elapsed = now - lastEventTime;
-            lastEventTimeEl.textContent = formatTime(elapsed);
-        }
-        
-        setInterval(updateStatus, 100);
-        
-        // Segment management
-        function startNewSegment(x, y) {
-            if (currentSegment && currentSegment.points.length > 0) {
-                currentSegment.endTime = getRelativeTime();
-                segments.push(currentSegment);
-            }
-            
-            currentSegment = {
-                id: currentSegmentIndex,
-                color: PALETTE[currentSegmentIndex % PALETTE.length],
-                startTime: getRelativeTime(),
-                endTime: null,
-                points: [{x, y, t: getRelativeTime()}]
-            };
-            
-            segmentColorEl.style.backgroundColor = currentSegment.color;
-            currentSegmentIndex++;
-        }
-        
-        function endSegment() {
-            if (currentSegment && currentSegment.points.length > 0) {
-                currentSegment.endTime = getRelativeTime();
-                segments.push(currentSegment);
-                currentSegment = null;
-            }
-        }
-        
-        // Mouse handling
-        captureSurface.addEventListener('mousemove', (e) => {
-            if (!isRecording) return;
-            
-            lastEventTime = performance.now();
-            
-            const x = e.clientX;
-            const y = e.clientY;
-            
-            // Clear segment timeout
-            if (segmentTimeoutId) {
-                clearTimeout(segmentTimeoutId);
-            }
-            
-            // Start new segment if needed
-            if (!currentSegment) {
-                startNewSegment(x, y);
-            } else {
-                currentSegment.points.push({
-                    x, y, 
-                    t: getRelativeTime()
-                });
-            }
-            
-            // Set timeout to end segment
-            segmentTimeoutId = setTimeout(() => {
-                endSegment();
-            }, SEGMENT_TIMEOUT);
-            
-            // Redraw
-            if (showPath) {
-                redrawCanvas();
-            }
+        document.getElementById('rtc-type').textContent = e.candidate.type || '—';
+      }
+    };
+    // Try to measure RTT via stats
+    setTimeout(() => {
+      pc.getStats().then(stats => {
+        stats.forEach(report => {
+          if (report.type === 'candidate-pair' && report.currentRoundTripTime) {
+            const rtt = (report.currentRoundTripTime * 1000).toFixed(0);
+            state.network.webrtc.rtt = rtt;
+            document.getElementById('rtc-rtt').textContent = rtt + 'ms';
+            setMetric('n-webrtc', rtt + 'ms');
+            setMetric('n-rttjitter', '—');
+          }
         });
-        
-        captureSurface.addEventListener('mouseleave', () => {
-            if (segmentTimeoutId) {
-                clearTimeout(segmentTimeoutId);
-            }
-            endSegment();
-            if (showPath) redrawCanvas();
-        });
-        
-        captureSurface.addEventListener('mousedown', (e) => {
-            if (!isRecording) return;
-            
-            lastEventTime = performance.now();
-            
-            const click = {
-                button: ['left', 'middle', 'right'][e.button] || 'unknown',
-                x: e.clientX,
-                y: e.clientY,
-                t: getRelativeTime(),
-                segmentId: currentSegment ? currentSegment.id : null,
-                target: e.target.tagName
-            };
-            
-            clicks.push(click);
-            
-            if (showClicks) {
-                drawClickMarker(click);
-            }
-        });
-        
-        // Prevent context menu on right-click
-        captureSurface.addEventListener('contextmenu', (e) => {
-            e.preventDefault();
-        });
-        
-        // Keyboard handling
-        // Keycap visualization
-        const keycapDisplay = document.getElementById('keycapDisplay');
-        const activeKeycaps = {};
-        const MAX_VISIBLE_KEYCAPS = 3;
-        
-        function showKeycap(key, code) {
-            // Remove existing keycap for this code if present
-            if (activeKeycaps[code]) {
-                const existing = activeKeycaps[code];
-                existing.element.remove();
-                delete activeKeycaps[code];
-            }
-            
-            // Create new keycap
-            const keycap = document.createElement('div');
-            keycap.className = 'keycap pressed active';
-            keycap.innerHTML = `
-                <span class="key-label">${escapeHtml(key)}</span>
-                <span class="key-code">${code}</span>
-            `;
-            
-            keycapDisplay.appendChild(keycap);
-            activeKeycaps[code] = {
-                element: keycap,
-                timeout: null
-            };
-            
-            // Limit visible keycaps
-            const allKeycaps = keycapDisplay.querySelectorAll('.keycap');
-            if (allKeycaps.length > MAX_VISIBLE_KEYCAPS) {
-                allKeycaps[0].remove();
-            }
-            
-            return keycap;
-        }
-        
-        function releaseKeycap(code) {
-            if (activeKeycaps[code]) {
-                const keycap = activeKeycaps[code];
-                keycap.element.classList.remove('pressed');
-                
-                // Remove after delay
-                keycap.timeout = setTimeout(() => {
-                    if (keycap.element && keycap.element.parentNode) {
-                        keycap.element.style.opacity = '0';
-                        keycap.element.style.transform = 'translateY(10px)';
-                        setTimeout(() => {
-                            if (keycap.element && keycap.element.parentNode) {
-                                keycap.element.remove();
-                            }
-                            delete activeKeycaps[code];
-                        }, 100);
-                    }
-                }, 500);
-            }
-        }
-        
-        function escapeHtml(text) {
-            const div = document.createElement('div');
-            div.textContent = text;
-            return div.innerHTML;
-        }
-        
-        document.addEventListener('keydown', (e) => {
-            if (!isRecording) return;
-            
-            // Check if focused on capture surface or its children
-            if (!captureSurface.contains(e.target) && e.target !== captureSurface) {
-                // Only capture if we're focused on the capture surface
-                if (e.target !== document.body) return;
-            }
-            
-            lastEventTime = performance.now();
-            
-            const eventTime = getRelativeTime();
-            
-            keyEvents.push({
-                type: 'keydown',
-                key: e.key,
-                code: e.code,
-                t: eventTime
-            });
-            
-            // Track key timing
-            keyTimings[e.code] = {
-                keydown: eventTime,
-                keyup: null
-            };
-            
-            // Show keycap visualization
-            showKeycap(e.key, e.code);
-            
-            // Handle printable characters
-            if (e.key.length === 1 && !e.ctrlKey && !e.metaKey && !e.altKey) {
-                if (!typingStartTime) {
-                    typingStartTime = eventTime;
-                }
-                typingEndTime = eventTime;
-                typedBuffer += e.key;
-                
-                updateKeyboardMetrics();
-            }
-            
-            // Handle backspace
-            if (e.key === 'Backspace') {
-                typedBuffer = typedBuffer.slice(0, -1);
-                updateKeyboardMetrics();
-            }
-        });
-        
-        document.addEventListener('keyup', (e) => {
-            if (!isRecording) return;
-            
-            const eventTime = getRelativeTime();
-            
-            keyEvents.push({
-                type: 'keyup',
-                key: e.key,
-                code: e.code,
-                t: eventTime
-            });
-            
-            // Update dwell time
-            if (keyTimings[e.code] && keyTimings[e.code].keydown) {
-                keyTimings[e.code].keyup = eventTime;
-                keyTimings[e.code].dwell = eventTime - keyTimings[e.code].keydown;
-            }
-            
-            // Release keycap visualization
-            releaseKeycap(e.code);
-        });
-        
-        function updateKeyboardMetrics() {
-            typedBufferEl.textContent = typedBuffer;
-            charCountEl.textContent = typedBuffer.length;
-            
-            if (typingStartTime && typingEndTime) {
-                const duration = (typingEndTime - typingStartTime) / 1000;
-                typingDurationEl.textContent = duration.toFixed(1) + 's';
-                
-                const cps = duration > 0 ? (typedBuffer.length / duration).toFixed(1) : 0;
-                cpsEl.textContent = cps;
-                
-                // WPM: 5 chars = 1 word
-                const words = typedBuffer.length / 5;
-                const wpm = duration > 0 ? ((words / duration) * 60).toFixed(0) : 0;
-                wpmEl.textContent = wpm;
-            }
-        }
-        
-        // Canvas drawing
-        function redrawCanvas() {
-            ctx.clearRect(0, 0, canvas.width, canvas.height);
-            
-            if (!showPath) return;
-            
-            // Draw completed segments
-            segments.forEach(segment => {
-                drawSegment(segment);
-                
-                // Draw segment endpoints
-                if (segment.points.length > 0) {
-                    const start = segment.points[0];
-                    const end = segment.points[segment.points.length - 1];
-                    
-                    ctx.beginPath();
-                    ctx.arc(start.x, start.y, 4, 0, Math.PI * 2);
-                    ctx.fillStyle = segment.color;
-                    ctx.fill();
-                    
-                    ctx.beginPath();
-                    ctx.arc(end.x, end.y, 4, 0, Math.PI * 2);
-                    ctx.fillStyle = segment.color;
-                    ctx.fill();
-                }
-            });
-            
-            // Draw current segment
-            if (currentSegment) {
-                drawSegment(currentSegment);
-            }
-        }
-        
-        function drawSegment(segment) {
-            if (segment.points.length < 2) return;
-            
-            ctx.beginPath();
-            ctx.strokeStyle = segment.color;
-            ctx.lineWidth = 2;
-            ctx.lineCap = 'round';
-            ctx.lineJoin = 'round';
-            
-            ctx.moveTo(segment.points[0].x, segment.points[0].y);
-            
-            for (let i = 1; i < segment.points.length; i++) {
-                ctx.lineTo(segment.points[i].x, segment.points[i].y);
-            }
-            
-            ctx.stroke();
-        }
-        
-        function drawClickMarker(click) {
-            const colors = { left: '#e74c3c', middle: '#f39c12', right: '#3498db' };
-            const color = colors[click.button] || '#95a5a6';
-            
-            const g = document.createElementNS('http://www.w3.org/2000/svg', 'g');
-            g.classList.add('click-marker');
-            g.setAttribute('data-segment', click.segmentId || '');
-            
-            // Outer circle
-            const circle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
-            circle.setAttribute('cx', click.x);
-            circle.setAttribute('cy', click.y);
-            circle.setAttribute('r', 12);
-            circle.setAttribute('stroke', color);
-            circle.setAttribute('fill', color);
-            circle.setAttribute('fill-opacity', '0.3');
-            g.appendChild(circle);
-            
-            // Inner dot
-            const dot = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
-            dot.setAttribute('cx', click.x);
-            dot.setAttribute('cy', click.y);
-            dot.setAttribute('r', 4);
-            dot.setAttribute('fill', color);
-            g.appendChild(dot);
-            
-            // Button label
-            const text = document.createElementNS('http://www.w3.org/2000/svg', 'text');
-            text.setAttribute('x', click.x);
-            text.setAttribute('y', click.y);
-            text.setAttribute('dy', '1');
-            text.textContent = click.button[0].toUpperCase();
-            g.appendChild(text);
-            
-            clickMarkersSvg.appendChild(g);
-            
-            // Animate
-            circle.animate([
-                { r: 0, opacity: 0 },
-                { r: 12, opacity: 1 }
-            ], {
-                duration: 200,
-                easing: 'ease-out'
-            });
-        }
-        
-        // Controls
-        document.getElementById('toggleRecording').addEventListener('click', function() {
-            isRecording = !isRecording;
-            
-            if (isRecording) {
-                this.textContent = 'Pause Recording';
-                this.classList.add('active');
-                recordingIndicator.classList.add('active');
-                recordingStatus.textContent = 'Recording: ON';
-                sessionStartTime = performance.now();
-            } else {
-                this.textContent = 'Resume Recording';
-                this.classList.remove('active');
-                recordingIndicator.classList.remove('active');
-                recordingStatus.textContent = 'Recording: PAUSED';
-                endSegment();
-            }
-        });
-        
-        document.getElementById('clearCanvas').addEventListener('click', function() {
-            ctx.clearRect(0, 0, canvas.width, canvas.height);
-            clickMarkersSvg.innerHTML = '';
-            
-            // Clear keycaps
-            keycapDisplay.innerHTML = '';
-            Object.keys(activeKeycaps).forEach(code => {
-                if (activeKeycaps[code].timeout) {
-                    clearTimeout(activeKeycaps[code].timeout);
-                }
-                delete activeKeycaps[code];
-            });
-            
-            // Reset data
-            segments = [];
-            currentSegment = null;
-            currentSegmentIndex = 0;
-            clicks = [];
-            keyEvents = [];
-            typedBuffer = '';
-            typingStartTime = null;
-            typingEndTime = null;
-            keyTimings = {};
-            sessionStartTime = performance.now();
-            
-            typedBufferEl.textContent = '';
-            charCountEl.textContent = '0';
-            typingDurationEl.textContent = '0s';
-            cpsEl.textContent = '0';
-            wpmEl.textContent = '0';
-            segmentColorEl.style.backgroundColor = PALETTE[0];
-        });
-        
-        document.getElementById('togglePath').addEventListener('click', function() {
-            showPath = !showPath;
-            canvas.style.display = showPath ? 'block' : 'none';
-            this.textContent = showPath ? 'Hide Path' : 'Show Path';
-            this.classList.toggle('active', showPath);
-            if (showPath) redrawCanvas();
-        });
-        
-        document.getElementById('toggleClicks').addEventListener('click', function() {
-            showClicks = !showClicks;
-            clickMarkersSvg.style.display = showClicks ? 'block' : 'none';
-            this.textContent = showClicks ? 'Hide Clicks' : 'Show Clicks';
-            this.classList.toggle('active', showClicks);
-        });
-        
-        document.getElementById('toggleKeyboard').addEventListener('click', function() {
-            showKeyboard = !showKeyboard;
-            document.getElementById('keyboardPanel').style.display = showKeyboard ? 'block' : 'none';
-            document.getElementById('keycapDisplay').style.display = showKeyboard ? 'flex' : 'none';
-            this.textContent = showKeyboard ? 'Hide Keyboard Panel' : 'Show Keyboard Panel';
-            this.classList.toggle('active', showKeyboard);
-        });
-        
-        // Export functionality
-        document.getElementById('exportJSON').addEventListener('click', function() {
-            const exportData = {
-                metadata: {
-                    startTime: new Date(Date.now() - (performance.now() - sessionStartTime)).toISOString(),
-                    endTime: new Date().toISOString(),
-                    devicePixelRatio: window.devicePixelRatio,
-                    viewport: {
-                        width: window.innerWidth,
-                        height: window.innerHeight
-                    }
-                },
-                mouseSegments: segments.map(s => ({
-                    id: s.id,
-                    color: s.color,
-                    startTime: s.startTime,
-                    endTime: s.endTime,
-                    points: s.points
-                })),
-                clicks: clicks,
-                keyboard: {
-                    keyEvents: keyEvents,
-                    typedBuffer: typedBuffer,
-                    typingMetrics: {
-                        chars: typedBuffer.length,
-                        durationMs: typingEndTime && typingStartTime ? typingEndTime - typingStartTime : 0,
-                        cps: parseFloat(cpsEl.textContent) || 0,
-                        wpm: parseInt(wpmEl.textContent) || 0,
-                        perKeyTiming: Object.entries(keyTimings).map(([code, timing]) => ({
-                            code,
-                            keydown: timing.keydown,
-                            keyup: timing.keyup,
-                            dwell: timing.dwell
-                        }))
-                    }
-                }
-            };
-            
-            const jsonStr = JSON.stringify(exportData, null, 2);
-            document.getElementById('jsonOutput').value = jsonStr;
-            document.getElementById('exportModal').classList.add('active');
-        });
-        
-        document.getElementById('copyJSON').addEventListener('click', function() {
-            const jsonOutput = document.getElementById('jsonOutput');
-            jsonOutput.select();
-            document.execCommand('copy');
-            this.textContent = 'Copied!';
-            setTimeout(() => this.textContent = 'Copy to Clipboard', 2000);
-        });
-        
-        document.getElementById('downloadJSON').addEventListener('click', function() {
-            const jsonStr = document.getElementById('jsonOutput').value;
-            const blob = new Blob([jsonStr], { type: 'application/json' });
-            const url = URL.createObjectURL(blob);
-            const a = document.createElement('a');
-            a.href = url;
-            a.download = `input-harness-${new Date().toISOString().replace(/[:.]/g, '-')}.json`;
-            a.click();
-            URL.revokeObjectURL(url);
-        });
-        
-        document.getElementById('closeModal').addEventListener('click', function() {
-            document.getElementById('exportModal').classList.remove('active');
-        });
-        
-        // JSON format documentation toggle
-        document.getElementById('jsonFormatHeader').addEventListener('click', function() {
-            const content = document.getElementById('jsonFormatContent');
-            const arrow = document.getElementById('formatArrow');
-            content.classList.toggle('active');
-            arrow.classList.toggle('active');
-        });
-        
-        // Screenshot functionality
-        document.getElementById('exportScreenshot').addEventListener('click', async function() {
-            const ui = document.getElementById('ui');
-            const keyboardPanel = document.getElementById('keyboardPanel');
-            
-            // Temporarily hide UI (including keycaps)
-            ui.style.display = 'none';
-            keyboardPanel.style.display = 'none';
-            keycapDisplay.style.display = 'none';
-            
-            // Wait a frame for UI to hide
-            await new Promise(resolve => requestAnimationFrame(resolve));
-            await new Promise(resolve => setTimeout(resolve, 100));
-            
-            try {
-                // Create a combined canvas
-                const combinedCanvas = document.createElement('canvas');
-                combinedCanvas.width = window.innerWidth;
-                combinedCanvas.height = window.innerHeight;
-                const combinedCtx = combinedCanvas.getContext('2d');
-                
-                // Fill with white background
-                combinedCtx.fillStyle = '#f5f5f5';
-                combinedCtx.fillRect(0, 0, combinedCanvas.width, combinedCanvas.height);
-                
-                // Draw the mouse path canvas
-                combinedCtx.drawImage(canvas, 0, 0);
-                
-                // Draw click markers
-                if (showClicks) {
-                    const svgData = new XMLSerializer().serializeToString(clickMarkersSvg);
-                    const svgBlob = new Blob([svgData], { type: 'image/svg+xml;charset=utf-8' });
-                    const url = URL.createObjectURL(svgBlob);
-                    const img = new Image();
-                    
-                    await new Promise((resolve, reject) => {
-                        img.onload = resolve;
-                        img.onerror = reject;
-                        img.src = url;
-                    });
-                    
-                    combinedCtx.drawImage(img, 0, 0);
-                    URL.revokeObjectURL(url);
-                }
-                
-                // Convert to blob
-                const blob = await new Promise(resolve => {
-                    combinedCanvas.toBlob(resolve, 'image/png');
-                });
-                
-                // Show options modal
-                const action = await showScreenshotOptions();
-                
-                if (action === 'copy') {
-                    try {
-                        await navigator.clipboard.write([
-                            new ClipboardItem({ 'image/png': blob })
-                        ]);
-                        alert('Screenshot copied to clipboard!');
-                    } catch (err) {
-                        console.error('Failed to copy:', err);
-                        alert('Failed to copy to clipboard. Try downloading instead.');
-                    }
-                } else if (action === 'download') {
-                    const url = URL.createObjectURL(blob);
-                    const a = document.createElement('a');
-                    a.href = url;
-                    a.download = `input-harness-screenshot-${new Date().toISOString().replace(/[:.]/g, '-')}.png`;
-                    a.click();
-                    URL.revokeObjectURL(url);
-                }
-            } catch (err) {
-                console.error('Screenshot failed:', err);
-                alert('Failed to capture screenshot: ' + err.message);
-            } finally {
-                // Restore UI visibility
-                ui.style.display = 'block';
-                keyboardPanel.style.display = showKeyboard ? 'block' : 'none';
-                keycapDisplay.style.display = showKeyboard ? 'flex' : 'none';
-            }
-        });
-        
-        function showScreenshotOptions() {
-            return new Promise(resolve => {
-                const modal = document.createElement('div');
-                modal.style.cssText = `
-                    position: fixed;
-                    top: 0;
-                    left: 0;
-                    right: 0;
-                    bottom: 0;
-                    background: rgba(0,0,0,0.5);
-                    display: flex;
-                    justify-content: center;
-                    align-items: center;
-                    z-index: 300;
-                `;
-                
-                const content = document.createElement('div');
-                content.style.cssText = `
-                    background: white;
-                    padding: 20px;
-                    border-radius: 8px;
-                    text-align: center;
-                `;
-                
-                content.innerHTML = `
-                    <h3 style="margin-bottom: 15px;">Screenshot Captured</h3>
-                    <p style="margin-bottom: 20px; color: #666;">UI was hidden, only path and clicks are visible</p>
-                    <div style="display: flex; gap: 10px; justify-content: center;">
-                        <button id="copyScreenshot">Copy to Clipboard</button>
-                        <button id="downloadScreenshot">Download PNG</button>
-                        <button id="cancelScreenshot" style="background: #95a5a6;">Cancel</button>
-                    </div>
-                `;
-                
-                modal.appendChild(content);
-                document.body.appendChild(modal);
-                
-                modal.querySelector('#copyScreenshot').addEventListener('click', () => {
-                    document.body.removeChild(modal);
-                    resolve('copy');
-                });
-                
-                modal.querySelector('#downloadScreenshot').addEventListener('click', () => {
-                    document.body.removeChild(modal);
-                    resolve('download');
-                });
-                
-                modal.querySelector('#cancelScreenshot').addEventListener('click', () => {
-                    document.body.removeChild(modal);
-                    resolve('cancel');
-                });
-                
-                modal.addEventListener('click', (e) => {
-                    if (e.target === modal) {
-                        document.body.removeChild(modal);
-                        resolve('cancel');
-                    }
-                });
-            });
-        }
-        
-        // Auto-start
-        console.log('Input Test Harness initialized. Recording started automatically.');
-    </script>
+      });
+      pc.close();
+    }, 3000);
+  } catch(e) {
+    document.getElementById('rtc-local').textContent = 'blocked';
+    setMetric('n-ip', 'blocked', 'warn');
+  }
+}
+
+// ─── ENVIRONMENT FINGERPRINTING ───────────────────────────────────────────────
+function collectEnvironment() {
+  const env = state.environment;
+
+  // Headless browser signals
+  const headlessSignals = [];
+  if (navigator.webdriver) headlessSignals.push('webdriver');
+  if (!navigator.plugins || navigator.plugins.length === 0) headlessSignals.push('no-plugins');
+  if (window.outerWidth === 0 && window.outerHeight === 0) headlessSignals.push('zero-window');
+  if (!window.chrome && navigator.userAgent.includes('Chrome')) headlessSignals.push('no-chrome-obj');
+
+  const isHeadless = headlessSignals.length > 0;
+  env.headless = headlessSignals;
+  setMetric('e-headless', isHeadless ? headlessSignals.join(',') : 'none detected', isHeadless ? 'danger' : 'ok');
+  if (isHeadless) {
+    addAnomalyIfNew('headless', 'high', 'Headless Browser Detected',
+      `Signals: ${headlessSignals.join(', ')}. This strongly indicates an automated browser.`);
+  }
+
+  // Hardware concurrency
+  env.hardwareConcurrency = navigator.hardwareConcurrency || '—';
+  setMetric('e-hw', env.hardwareConcurrency, env.hardwareConcurrency > 16 ? 'warn' : '');
+
+  // Device memory
+  env.deviceMemory = navigator.deviceMemory || '—';
+  setMetric('e-mem', env.deviceMemory ? env.deviceMemory + 'GB' : '—',
+    env.deviceMemory >= 8 && env.hardwareConcurrency >= 8 ? 'warn' : '');
+
+  // Touch
+  env.touchPoints = navigator.maxTouchPoints || 0;
+  setMetric('e-touch', env.touchPoints > 0 ? `${env.touchPoints} pts` : 'none');
+
+  // Plugins
+  env.pluginCount = navigator.plugins ? navigator.plugins.length : 0;
+  setMetric('e-plugins', env.pluginCount, env.pluginCount === 0 ? 'danger' : '');
+
+  // WebGL
+  try {
+    const gl = document.createElement('canvas').getContext('webgl');
+    const ext = gl.getExtension('WEBGL_debug_renderer_info');
+    env.webglVendor = ext ? gl.getParameter(ext.UNMASKED_VENDOR_WEBGL) : 'n/a';
+    env.webglRenderer = ext ? gl.getParameter(ext.UNMASKED_RENDERER_WEBGL) : 'n/a';
+    const shortVendor = env.webglVendor.split(' ')[0];
+    setMetric('e-webgl', shortVendor, env.webglVendor.includes('SwiftShader') || env.webglVendor.includes('Mesa') ? 'danger' : '');
+    if (env.webglVendor.includes('SwiftShader')) {
+      addAnomalyIfNew('swiftshader', 'high', 'SwiftShader WebGL Detected',
+        'SwiftShader is a software renderer used in headless Chrome. Almost always indicates an automated environment.');
+    }
+  } catch(e) { env.webglVendor = 'blocked'; setMetric('e-webgl', 'blocked', 'warn'); }
+
+  // Screen vs window discrepancy
+  const screenDelta = Math.abs(screen.width - window.outerWidth);
+  setMetric('e-screen', screenDelta + 'px', screenDelta < 2 && screen.width > 0 ? 'warn' : '');
+  if (screenDelta < 2 && screen.width > 1024) {
+    addAnomalyIfNew('screen-match', 'medium', 'Exact Screen/Window Match',
+      `Window size (${window.outerWidth}) exactly matches screen width (${screen.width}). Real browsers rarely match exactly due to OS chrome, taskbars, etc.`);
+  }
+
+  // Clock skew estimation (compare Date to performance)
+  const dateNow = Date.now();
+  const perfNow = performance.timeOrigin + performance.now();
+  const skew = Math.abs(dateNow - perfNow);
+  setMetric('e-clock', skew.toFixed(1) + 'ms', skew > 100 ? 'warn' : '');
+  if (skew > 500) {
+    addAnomalyIfNew('clock-skew', 'medium', 'Clock Skew Detected',
+      `${skew.toFixed(0)}ms difference between Date.now() and performance.timeOrigin. May indicate VM time sync issues or manipulated clocks.`);
+  }
+}
+
+// Tab visibility
+document.addEventListener('visibilitychange', () => {
+  state.session_meta.tabSwitches++;
+  setMetric('e-vis', document.hidden ? 'hidden' : 'visible');
+  document.getElementById('s-tabs').textContent = state.session_meta.tabSwitches;
+  addLog('net', 'tab-' + (document.hidden ? 'hidden' : 'visible'), '');
+});
+
+window.addEventListener('focus', () => {
+  state.session_meta.focusEvents++;
+  document.getElementById('s-focus').textContent = state.session_meta.focusEvents;
+});
+
+// DevTools detection (size heuristic)
+setInterval(() => {
+  const threshold = 160;
+  const widthDelta = window.outerWidth - window.innerWidth;
+  const heightDelta = window.outerHeight - window.innerHeight;
+  const open = widthDelta > threshold || heightDelta > threshold;
+  setMetric('e-devtools', open ? 'OPEN' : 'closed', open ? 'warn' : '');
+  if (open) addAnomalyIfNew('devtools', 'low', 'DevTools Likely Open', 'Browser devtools appear to be open, which is common in bot scripting environments.');
+}, 1000);
+
+// ─── SCORING ENGINE ───────────────────────────────────────────────────────────
+function computeRiskScore() {
+  let score = 0;
+  const factors = [];
+
+  // Mouse factors
+  const vels = state.velocityHistory.map(p => p.v);
+  const jitter = stddev(vels);
+  const straights = state.mouse.segments.filter(s => s.straightness !== undefined).map(s => s.straightness);
+  const avgStraight = mean(straights);
+
+  if (vels.length > 20) {
+    if (jitter < 0.05) { score += 20; factors.push({ label: 'Low velocity jitter', pts: 20 }); }
+    if (avgStraight > 0.97) { score += 15; factors.push({ label: 'Unnaturally straight paths', pts: 15 }); }
+    if (state.mouse.overshootCount === 0 && state.mouse.segments.length > 3) { score += 10; factors.push({ label: 'No overshoot/correction', pts: 10 }); }
+    if (state.mouse.tremors < 3 && vels.length > 100) { score += 10; factors.push({ label: 'No micro-tremors', pts: 10 }); }
+  }
+
+  // Keyboard factors
+  const dwells = state.keyboard.dwellTimes;
+  const dwellSD = stddev(dwells);
+  if (dwells.length > 5) {
+    if (dwellSD < 5) { score += 20; factors.push({ label: 'Robotic dwell time uniformity', pts: 20 }); }
+    if (state.keyboard.errorCount === 0 && dwells.length > 20) { score += 10; factors.push({ label: 'Zero typing errors', pts: 10 }); }
+    if (state.keyboard.pasteCount > 0) { score += 15; factors.push({ label: 'Paste event detected', pts: 15 }); }
+  }
+
+  // Environment factors
+  if (state.environment.headless && state.environment.headless.length > 0) { score += 30; factors.push({ label: 'Headless browser signals', pts: 30 }); }
+  if (state.environment.pluginCount === 0) { score += 10; factors.push({ label: 'No browser plugins', pts: 10 }); }
+  if (state.environment.webglVendor && (state.environment.webglVendor.includes('SwiftShader') || state.environment.webglVendor.includes('Mesa'))) {
+    score += 25; factors.push({ label: 'Software WebGL renderer', pts: 25 });
+  }
+
+  // Network factors
+  const t = state.network.navTiming;
+  if (t.dns !== undefined && t.dns < 1) { score += 10; factors.push({ label: 'Instant DNS (pre-cached)', pts: 10 }); }
+  if (t.tls > 0 && t.tcp > 0 && t.tls / t.tcp > 3) { score += 10; factors.push({ label: 'TLS/TCP latency mismatch', pts: 10 }); }
+
+  // Session factors
+  const elapsedSec = now() / 1000;
+  if (state.session.firstInteraction !== null && state.session.firstInteraction < 200) {
+    score += 15; factors.push({ label: 'Interaction < 200ms after load', pts: 15 });
+  }
+
+  score = Math.min(100, score);
+  state.score.current = score;
+  state.score.history.push({ t: now(), v: score });
+
+  updateScoreDisplay(score);
+  updateScoreSparkline();
+  updateFeatureVecPreview(factors);
+  return score;
+}
+
+function updateScoreDisplay(score) {
+  const el = document.getElementById('scoreValue');
+  const bar = document.getElementById('scoreBar');
+  el.textContent = score + '%';
+  bar.style.width = score + '%';
+  el.className = 'score-value' + (score >= 60 ? ' high' : score >= 30 ? ' medium' : '');
+  bar.style.background = score >= 60 ? 'var(--red)' : score >= 30 ? 'var(--yellow)' : 'var(--green)';
+}
+
+function updateFeatureVecPreview(factors) {
+  const preview = document.getElementById('featureVecPreview');
+  const vels = state.velocityHistory.map(p => p.v);
+  const dwells = state.keyboard.dwellTimes;
+  const vec = {
+    mouse_jitter_sd: stddev(vels).toFixed(4),
+    mouse_straightness: mean(state.mouse.segments.filter(s=>s.straightness).map(s=>s.straightness)).toFixed(4),
+    mouse_overshoot_count: state.mouse.overshootCount,
+    mouse_tremors: state.mouse.tremors,
+    key_dwell_sd: stddev(dwells).toFixed(2),
+    key_flight_mean: mean(state.keyboard.flightTimes).toFixed(2),
+    key_error_rate: dwells.length > 0 ? (state.keyboard.errorCount / dwells.length).toFixed(3) : 0,
+    paste_count: state.keyboard.pasteCount,
+    headless_signals: (state.environment.headless || []).length,
+    plugin_count: state.environment.pluginCount || 0,
+    webrtc_local_ip: state.network.webrtc.localIP || '',
+    nav_dns_ms: state.network.navTiming.dns ? state.network.navTiming.dns.toFixed(2) : 0,
+    nav_tls_ms: state.network.navTiming.tls ? state.network.navTiming.tls.toFixed(2) : 0,
+    nav_tcp_ms: state.network.navTiming.tcp ? state.network.navTiming.tcp.toFixed(2) : 0,
+    first_interaction_ms: state.session.firstInteraction ? state.session.firstInteraction.toFixed(0) : 0,
+    risk_score: state.score.current
+  };
+  preview.innerHTML = Object.entries(vec).map(([k,v]) =>
+    `<div class="feature-vec"><span class="key">${k}:</span> <span class="val">${v}</span></div>`
+  ).join('');
+}
+
+// ─── ANOMALY SYSTEM ───────────────────────────────────────────────────────────
+const seenAnomalies = new Set();
+
+function addAnomalyIfNew(id, severity, title, desc) {
+  if (seenAnomalies.has(id)) return;
+  seenAnomalies.add(id);
+  state.score.anomalies.push({ id, severity, title, desc, t: now() });
+  renderAnomalies();
+  addLog('danger', severity.toUpperCase(), title);
+}
+
+function renderAnomalies() {
+  const list = document.getElementById('anomalyList');
+  if (state.score.anomalies.length === 0) {
+    list.innerHTML = '<div class="no-data">No anomalies detected.</div>';
+    return;
+  }
+  list.innerHTML = state.score.anomalies.map(a => `
+    <div class="anomaly-item ${a.severity}">
+      <div class="anomaly-title">⚠ ${a.title}</div>
+      <div class="anomaly-desc">${a.desc}</div>
+    </div>
+  `).join('');
+}
+
+// ─── EVENT LOG ────────────────────────────────────────────────────────────────
+const LOG_MAX = 80;
+let logBuffer = [];
+function addLog(type, label, body) {
+  const t = now();
+  logBuffer.push({ t, type, label, body });
+  if (logBuffer.length > LOG_MAX) logBuffer.shift();
+}
+
+// ─── SPARKLINES ───────────────────────────────────────────────────────────────
+function drawSparkline(canvasId, data, color = '#58a6ff') {
+  const c = document.getElementById(canvasId);
+  if (!c) return;
+  const ctx = c.getContext('2d');
+  const w = c.width, h = c.height;
+  ctx.clearRect(0, 0, w, h);
+  if (data.length < 2) return;
+  const max = Math.max(...data, 0.001);
+  ctx.beginPath();
+  data.forEach((v, i) => {
+    const x = i / (data.length - 1) * w;
+    const y = h - (v / max * h * 0.9) - 2;
+    i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
+  });
+  ctx.strokeStyle = color;
+  ctx.lineWidth = 1.5;
+  ctx.stroke();
+  // fill
+  ctx.lineTo(w, h); ctx.lineTo(0, h); ctx.closePath();
+  ctx.fillStyle = color + '20';
+  ctx.fill();
+}
+
+function updateScoreSparkline() {
+  const data = state.score.history.slice(-60).map(p => p.v);
+  drawSparkline('scoreSparkline', data, state.score.current >= 60 ? '#f85149' : state.score.current >= 30 ? '#d29922' : '#3fb950');
+}
+
+function updateVelSparkline() {
+  const data = state.velocityHistory.slice(-60).map(p => p.v);
+  drawSparkline('velSparkline', data, '#58a6ff');
+}
+
+function updateFlightSparkline() {
+  const data = state.keyboard.flightTimes.slice(-60);
+  drawSparkline('flightSparkline', data, '#bc8cff');
+}
+
+// ─── HEATMAP ──────────────────────────────────────────────────────────────────
+function renderHeatmap() {
+  heatCtx.clearRect(0, 0, heatCanvas.width, heatCanvas.height);
+  state.heatmap.data.forEach(p => {
+    const r = Math.min(255, Math.floor(p.v * 800));
+    const g = Math.max(0, 255 - r);
+    const grad = heatCtx.createRadialGradient(p.x, p.y, 0, p.x, p.y, 12);
+    grad.addColorStop(0, `rgba(${r},${g},0,0.15)`);
+    grad.addColorStop(1, 'rgba(0,0,0,0)');
+    heatCtx.fillStyle = grad;
+    heatCtx.fillRect(p.x-12, p.y-12, 24, 24);
+  });
+}
+
+function toggleHeatmap() {
+  state.heatmap.visible = !state.heatmap.visible;
+  const el = document.getElementById('heatCanvas');
+  el.classList.toggle('visible', state.heatmap.visible);
+  if (state.heatmap.visible) renderHeatmap();
+}
+
+// ─── REPLAY ───────────────────────────────────────────────────────────────────
+let replayRaf = null;
+function startReplay() {
+  if (state.mouse.allPoints.length === 0) return;
+  stopReplay();
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  const pts = state.mouse.allPoints;
+  const speed = parseFloat(document.getElementById('replaySpeed').value);
+  const duration = pts[pts.length-1].t - pts[0].t;
+  let startReal = null;
+  state.replay.active = true;
+
+  function frame(ts) {
+    if (!state.replay.active) return;
+    if (!startReal) startReal = ts;
+    const elapsed = (ts - startReal) * speed;
+    const progress = Math.min(elapsed / duration, 1);
+    document.getElementById('replaySlider').value = progress * 100;
+    document.getElementById('replay-time').textContent = (elapsed / 1000).toFixed(2) + 's';
+
+    // Draw up to current time
+    const targetT = pts[0].t + elapsed;
+    ctx.clearRect(0, 0, canvas.width, canvas.height);
+    let lastPt = null;
+    for (const pt of pts) {
+      if (pt.t > targetT) break;
+      if (lastPt) {
+        ctx.beginPath();
+        ctx.moveTo(lastPt.x, lastPt.y);
+        ctx.lineTo(pt.x, pt.y);
+        ctx.strokeStyle = lerpColor('#58a6ff', '#f85149', Math.min(pt.v * 5, 1));
+        ctx.lineWidth = 1.5;
+        ctx.globalAlpha = 0.7;
+        ctx.stroke();
+        ctx.globalAlpha = 1;
+      }
+      lastPt = pt;
+    }
+    if (progress < 1) replayRaf = requestAnimationFrame(frame);
+    else state.replay.active = false;
+  }
+  replayRaf = requestAnimationFrame(frame);
+}
+
+function stopReplay() {
+  state.replay.active = false;
+  if (replayRaf) cancelAnimationFrame(replayRaf);
+  redrawAll();
+}
+
+function redrawAll() {
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  const pts = state.mouse.allPoints;
+  if (pts.length < 2) return;
+  for (let i = 1; i < pts.length; i++) {
+    ctx.beginPath();
+    ctx.moveTo(pts[i-1].x, pts[i-1].y);
+    ctx.lineTo(pts[i].x, pts[i].y);
+    ctx.strokeStyle = lerpColor('#58a6ff', '#f85149', Math.min(pts[i].v * 5, 1));
+    ctx.lineWidth = 1.5;
+    ctx.globalAlpha = 0.7;
+    ctx.stroke();
+    ctx.globalAlpha = 1;
+  }
+}
+
+// ─── EXPORT ───────────────────────────────────────────────────────────────────
+function buildExportData() {
+  const vels = state.velocityHistory.map(p => p.v);
+  const dwells = state.keyboard.dwellTimes;
+  return {
+    session: {
+      startTime: new Date(performance.timeOrigin).toISOString(),
+      durationMs: now(),
+      firstInteractionMs: state.session.firstInteraction
+    },
+    riskScore: state.score.current,
+    anomalies: state.score.anomalies,
+    mouse: {
+      segments: state.mouse.segments,
+      clicks: state.mouse.clicks,
+      allPoints: state.mouse.allPoints,
+      metrics: {
+        avgVelocity: mean(vels),
+        velocityJitter: stddev(vels),
+        avgStraightness: mean(state.mouse.segments.filter(s=>s.straightness).map(s=>s.straightness)),
+        overshootCount: state.mouse.overshootCount,
+        pauseCount: state.mouse.pauseCount,
+        tremors: state.mouse.tremors,
+        scrollEvents: state.mouse.scrollEvents
+      }
+    },
+    keyboard: {
+      keyEvents: state.keyboard.keyEvents,
+      dwellTimes: dwells,
+      flightTimes: state.keyboard.flightTimes,
+      pasteCount: state.keyboard.pasteCount,
+      errorCount: state.keyboard.errorCount,
+      metrics: {
+        avgDwell: mean(dwells),
+        dwellSD: stddev(dwells),
+        avgFlightTime: mean(state.keyboard.flightTimes),
+        wpm: dwells.length > 5 ? Math.round((dwells.length/5)/(now()/1000/60)) : 0,
+        burstCount: state.keyboard.bursts.length
+      }
+    },
+    network: state.network,
+    environment: state.environment,
+    sessionMeta: state.session_meta
+  };
+}
+
+function exportJSON() {
+  const data = buildExportData();
+  download('antibot-session.json', JSON.stringify(data, null, 2), 'application/json');
+}
+
+function exportMLVectors() {
+  const vels = state.velocityHistory.map(p => p.v);
+  const dwells = state.keyboard.dwellTimes;
+  const vec = {
+    mouse_vel_mean: mean(vels),
+    mouse_vel_sd: stddev(vels),
+    mouse_straightness: mean(state.mouse.segments.filter(s=>s.straightness).map(s=>s.straightness)),
+    mouse_overshoot: state.mouse.overshootCount,
+    mouse_tremors: state.mouse.tremors,
+    mouse_pause_count: state.mouse.pauseCount,
+    key_dwell_mean: mean(dwells),
+    key_dwell_sd: stddev(dwells),
+    key_flight_mean: mean(state.keyboard.flightTimes),
+    key_error_rate: dwells.length > 0 ? state.keyboard.errorCount / dwells.length : 0,
+    paste_count: state.keyboard.pasteCount,
+    burst_count: state.keyboard.bursts.length,
+    headless_signals: (state.environment.headless || []).length,
+    plugin_count: state.environment.pluginCount || 0,
+    webgl_software: state.environment.webglVendor && state.environment.webglVendor.includes('SwiftShader') ? 1 : 0,
+    nav_dns_ms: state.network.navTiming.dns || 0,
+    nav_tcp_ms: state.network.navTiming.tcp || 0,
+    nav_tls_ms: state.network.navTiming.tls || 0,
+    nav_ttfb_ms: state.network.navTiming.ttfb || 0,
+    conn_rtt: state.network.connection.rtt || 0,
+    conn_downlink: state.network.connection.downlink || 0,
+    first_interaction_ms: state.session.firstInteraction || 0,
+    tab_switches: state.session_meta.tabSwitches,
+    idle_periods: state.session_meta.idlePeriods,
+    risk_score: state.score.current,
+    label: state.score.current >= 60 ? 'bot' : state.score.current >= 30 ? 'suspicious' : 'human'
+  };
+  download('ml-features.json', JSON.stringify([vec], null, 2), 'application/json');
+}
+
+function exportCSV() {
+  const header = 'x,y,t,velocity\n';
+  const rows = state.mouse.allPoints.map(p => `${p.x.toFixed(1)},${p.y.toFixed(1)},${p.t.toFixed(2)},${(p.v||0).toFixed(4)}`).join('\n');
+  download('mouse-points.csv', header + rows, 'text/csv');
+}
+
+function copyScore() {
+  const data = buildExportData();
+  const report = `ANTI-BOT RESEARCH HARNESS — RISK REPORT
+Generated: ${new Date().toISOString()}
+Session Duration: ${(now()/1000).toFixed(1)}s
+Risk Score: ${state.score.current}%
+
+ANOMALIES (${state.score.anomalies.length}):
+${state.score.anomalies.map(a => `  [${a.severity.toUpperCase()}] ${a.title}\n  ${a.desc}`).join('\n\n')}
+
+MOUSE: jitter=${stddev(state.velocityHistory.map(p=>p.v)).toFixed(4)} overshoot=${state.mouse.overshootCount} tremors=${state.mouse.tremors}
+KEYBOARD: dwellSD=${stddev(state.keyboard.dwellTimes).toFixed(1)}ms errors=${state.keyboard.errorCount} pastes=${state.keyboard.pasteCount}
+NETWORK: dns=${state.network.navTiming.dns?.toFixed(1)||'?'}ms tcp=${state.network.navTiming.tcp?.toFixed(1)||'?'}ms tls=${state.network.navTiming.tls?.toFixed(1)||'?'}ms
+ENVIRONMENT: headless=${(state.environment.headless||[]).join(',')||'none'} plugins=${state.environment.pluginCount} webgl=${state.environment.webglVendor}`;
+  navigator.clipboard.writeText(report).catch(() => {});
+  alert('Report copied to clipboard!');
+}
+
+function download(filename, content, type) {
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([content], { type }));
+  a.download = filename;
+  a.click();
+}
+
+function clearAll() {
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+  heatCtx.clearRect(0, 0, heatCanvas.width, heatCanvas.height);
+  svg.innerHTML = '';
+  state.mouse.segments = []; state.mouse.allPoints = []; state.mouse.clicks = [];
+  state.mouse.segIndex = 0; state.mouse.overshootCount = 0;
+  state.mouse.pauseCount = 0; state.mouse.tremors = 0; state.mouse.scrollEvents = [];
+  state.keyboard.keyEvents = []; state.keyboard.dwellTimes = []; state.keyboard.flightTimes = [];
+  state.keyboard.totalChars = 0; state.keyboard.errorCount = 0; state.keyboard.pasteCount = 0;
+  state.keyboard.bursts = []; state.keyboard.currentBurst = [];
+  state.score.history = []; state.score.anomalies = []; state.score.current = 0;
+  state.velocityHistory = []; state.heatmap.data = [];
+  seenAnomalies.clear(); logBuffer = [];
+  renderAnomalies();
+  updateScoreDisplay(0);
+  state.session.start = performance.now(); state.session.firstInteraction = null;
+  lastX = null; lastY = null; lastT = null;
+  document.getElementById('velLabel').textContent = 'MOVE MOUSE TO BEGIN CAPTURE';
+  document.getElementById('velLabel').style.display = '';
+}
+
+// ─── TABS ─────────────────────────────────────────────────────────────────────
+function switchTab(name) {
+  document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+  document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
+  document.getElementById('tab-' + name).classList.add('active');
+  event.target.classList.add('active');
+}
+
+// ─── SESSION TIMER ────────────────────────────────────────────────────────────
+let lastEventT = performance.now();
+document.addEventListener('mousemove', () => { lastEventT = performance.now(); });
+document.addEventListener('keydown', () => { lastEventT = performance.now(); });
+
+setInterval(() => {
+  const elapsed = now();
+  document.getElementById('s-dur').textContent = (elapsed/1000).toFixed(0) + 's';
+  if (state.session.firstInteraction)
+    document.getElementById('s-first').textContent = (state.session.firstInteraction).toFixed(0) + 'ms';
+  const idleMs = performance.now() - lastEventT;
+  if (idleMs > IDLE_THRESHOLD) state.session_meta.idlePeriods++;
+  document.getElementById('s-idle').textContent = state.session_meta.idlePeriods;
+  document.getElementById('s-eps').textContent = (state.session_meta.totalEvents / Math.max(elapsed/1000, 1)).toFixed(1);
+
+  collectResourceTiming();
+  computeRiskScore();
+  updateVelSparkline();
+  updateFlightSparkline();
+}, 1000);
+
+// ─── INIT ─────────────────────────────────────────────────────────────────────
+window.addEventListener('load', () => {
+  collectNavTiming();
+  collectConnectionInfo();
+  collectEnvironment();
+  probeWebRTC();
+});
+
+// initial score render
+updateScoreDisplay(0);
+renderAnomalies();
+</script>
 </body>
 </html>
