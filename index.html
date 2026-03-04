@@ -1,0 +1,1201 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Input Test Harness</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            overflow: hidden;
+            background: #f5f5f5;
+        }
+        
+        #captureSurface {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+            cursor: crosshair;
+        }
+        
+        #mouseCanvas {
+            position: fixed;
+            top: 0;
+            left: 0;
+            pointer-events: none;
+            z-index: 10;
+        }
+        
+        #ui {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            z-index: 100;
+            background: rgba(255,255,255,0.95);
+            padding: 15px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        
+        #statusBar {
+            display: flex;
+            gap: 20px;
+            align-items: center;
+            flex-wrap: wrap;
+            margin-bottom: 10px;
+        }
+        
+        .status-item {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 14px;
+        }
+        
+        .recording-indicator {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            background: #ccc;
+        }
+        
+        .recording-indicator.active {
+            background: #e74c3c;
+            animation: pulse 1s infinite;
+        }
+        
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+        
+        #controls {
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+        
+        button {
+            padding: 8px 16px;
+            border: none;
+            border-radius: 4px;
+            background: #3498db;
+            color: white;
+            cursor: pointer;
+            font-size: 13px;
+            transition: background 0.2s;
+        }
+        
+        button:hover {
+            background: #2980b9;
+        }
+        
+        button.active {
+            background: #27ae60;
+        }
+        
+        #openGuide {
+            background: #9b59b6;
+        }
+        
+        #openGuide:hover {
+            background: #8e44ad;
+        }
+        
+        #keyboardPanel {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            background: rgba(255,255,255,0.95);
+            padding: 15px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            min-width: 280px;
+            z-index: 50;
+        }
+        
+        #typedBuffer {
+            min-height: 24px;
+            background: #f8f9fa;
+            padding: 8px;
+            border-radius: 4px;
+            margin-bottom: 10px;
+            font-family: monospace;
+            font-size: 14px;
+            word-break: break-all;
+        }
+        
+        #metrics {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 8px;
+            font-size: 13px;
+        }
+        
+        .metric {
+            display: flex;
+            justify-content: space-between;
+        }
+        
+        .metric-label {
+            color: #666;
+        }
+        
+        .metric-value {
+            font-weight: 600;
+            color: #333;
+        }
+        
+        .click-marker {
+            position: absolute;
+            pointer-events: none;
+            z-index: 20;
+        }
+        
+        #keycapDisplay {
+            position: fixed;
+            bottom: 20px;
+            left: 20px;
+            display: flex;
+            flex-direction: row;
+            gap: 8px;
+            z-index: 50;
+            pointer-events: none;
+        }
+        
+        .keycap {
+            width: 60px;
+            height: 60px;
+            background: linear-gradient(180deg, #f8f9fa 0%, #e9ecef 100%);
+            border: 2px solid #dee2e6;
+            border-radius: 8px;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1), 0 1px 3px rgba(0,0,0,0.08);
+            transition: all 0.1s ease;
+            opacity: 0;
+            transform: translateY(10px);
+        }
+        
+        .keycap.active {
+            opacity: 1;
+            transform: translateY(0);
+        }
+        
+        .keycap.pressed {
+            background: linear-gradient(180deg, #3498db 0%, #2980b9 100%);
+            border-color: #2980b9;
+            transform: translateY(2px);
+            box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+        }
+        
+        .keycap.pressed .key-label {
+            color: white;
+        }
+        
+        .keycap.pressed .key-code {
+            color: rgba(255,255,255,0.7);
+        }
+        
+        .key-label {
+            font-size: 20px;
+            font-weight: 600;
+            color: #2c3e50;
+            line-height: 1;
+        }
+        
+        .key-code {
+            font-size: 9px;
+            color: #7f8c8d;
+            margin-top: 2px;
+            font-family: monospace;
+        }
+        
+        .click-marker circle {
+            fill: none;
+            stroke-width: 2;
+        }
+        
+        .click-marker text {
+            font-size: 10px;
+            fill: white;
+            text-anchor: middle;
+            dominant-baseline: central;
+        }
+        
+        #exportModal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: rgba(0,0,0,0.5);
+            z-index: 200;
+            justify-content: center;
+            align-items: center;
+        }
+        
+        #exportModal.active {
+            display: flex;
+        }
+        
+        #exportContent {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            width: 90%;
+            max-width: 900px;
+            max-height: 85vh;
+            overflow: auto;
+        }
+        
+        #jsonOutput {
+            width: 100%;
+            height: 250px;
+            font-family: monospace;
+            font-size: 12px;
+            padding: 10px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            resize: none;
+            margin-top: 15px;
+        }
+        
+        #jsonFormatInfo {
+            background: #f8f9fa;
+            border: 1px solid #dee2e6;
+            border-radius: 6px;
+            margin-bottom: 10px;
+            overflow: hidden;
+        }
+        
+        #jsonFormatHeader {
+            background: #e9ecef;
+            padding: 10px 15px;
+            cursor: pointer;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            font-weight: 600;
+            color: #495057;
+        }
+        
+        #jsonFormatHeader:hover {
+            background: #dee2e6;
+        }
+        
+        #jsonFormatContent {
+            padding: 15px;
+            display: none;
+            font-size: 13px;
+            line-height: 1.6;
+        }
+        
+        #jsonFormatContent.active {
+            display: block;
+        }
+        
+        .format-section {
+            margin-bottom: 15px;
+        }
+        
+        .format-section h4 {
+            color: #2c3e50;
+            margin-bottom: 8px;
+            font-size: 14px;
+        }
+        
+        .format-section pre {
+            background: #f4f4f4;
+            padding: 10px;
+            border-radius: 4px;
+            overflow-x: auto;
+            font-size: 11px;
+            border-left: 3px solid #3498db;
+        }
+        
+        .format-arrow {
+            transition: transform 0.2s;
+        }
+        
+        .format-arrow.active {
+            transform: rotate(90deg);
+        }
+        
+        .export-actions {
+            display: flex;
+            gap: 10px;
+            margin-top: 15px;
+        }
+        
+        h3 {
+            margin-bottom: 15px;
+            font-size: 18px;
+        }
+    </style>
+</head>
+<body>
+    <div id="captureSurface"></div>
+    <canvas id="mouseCanvas"></canvas>
+    
+    <div id="ui">
+        <div id="statusBar">
+            <div class="status-item">
+                <div class="recording-indicator active" id="recordingIndicator"></div>
+                <span id="recordingStatus">Recording: ON</span>
+            </div>
+            <div class="status-item">
+                <span class="status-label">Last event:</span>
+                <span id="lastEventTime">--</span>
+            </div>
+            <div class="status-item">
+                <span class="status-label">Segment color:</span>
+                <div id="segmentColor" style="width:20px;height:20px;border-radius:4px;background:#3498db;"></div>
+            </div>
+        </div>
+        <div id="controls">
+            <button id="toggleRecording" class="active">Pause Recording</button>
+            <button id="clearCanvas">Clear Canvas</button>
+            <button id="togglePath" class="active">Hide Path</button>
+            <button id="toggleClicks" class="active">Hide Clicks</button>
+            <button id="toggleKeyboard" class="active">Hide Keyboard Panel</button>
+            <button id="exportJSON">Export JSON</button>
+            <button id="exportScreenshot">Export Screenshot</button>
+            <button id="openGuide" onclick="window.open('guide.html', '_blank')">Guide</button>
+        </div>
+    </div>
+    
+    <div id="keyboardPanel">
+        <h4>Typed Buffer</h4>
+        <div id="typedBuffer"></div>
+        <div id="metrics">
+            <div class="metric">
+                <span class="metric-label">Characters:</span>
+                <span class="metric-value" id="charCount">0</span>
+            </div>
+            <div class="metric">
+                <span class="metric-label">Duration:</span>
+                <span class="metric-value" id="typingDuration">0s</span>
+            </div>
+            <div class="metric">
+                <span class="metric-label">CPS:</span>
+                <span class="metric-value" id="cps">0</span>
+            </div>
+            <div class="metric">
+                <span class="metric-label">WPM:</span>
+                <span class="metric-value" id="wpm">0</span>
+            </div>
+        </div>
+    </div>
+    
+    <svg id="clickMarkers" style="position:fixed;top:0;left:0;width:100%;height:100%;pointer-events:none;z-index:20;">
+    </svg>
+    
+    <div id="keycapDisplay"></div>
+    
+    <div id="exportModal">
+        <div id="exportContent">
+            <h3>Export JSON</h3>
+            
+            <div id="jsonFormatInfo">
+                <div id="jsonFormatHeader">
+                    <span>JSON Format Documentation</span>
+                    <span class="format-arrow" id="formatArrow">▶</span>
+                </div>
+                <div id="jsonFormatContent">
+                    <div class="format-section">
+                        <h4>metadata</h4>
+                        <pre>{
+  "startTime": "ISO timestamp when session started",
+  "endTime": "ISO timestamp when session ended", 
+  "devicePixelRatio": 1,
+  "viewport": { "width": 1920, "height": 1080 }
+}</pre>
+                    </div>
+                    
+                    <div class="format-section">
+                        <h4>mouseSegments[]</h4>
+                        <p>Continuous mouse movements segmented by pauses (250ms threshold).</p>
+                        <pre>{
+  "id": 0,
+  "color": "#3498db",
+  "startTime": 0,    // ms from session start
+  "endTime": 1250,
+  "points": [
+    { "x": 100, "y": 200, "t": 0 },
+    { "x": 150, "y": 250, "t": 16 }  // t = timestamp in ms
+  ]
+}</pre>
+                    </div>
+                    
+                    <div class="format-section">
+                        <h4>clicks[]</h4>
+                        <pre>{
+  "button": "left|middle|right",
+  "x": 250,
+  "y": 300,
+  "t": 5000,         // timestamp in ms
+  "segmentId": 2,    // which segment this click belongs to
+  "target": "DIV"    // HTML element tag
+}</pre>
+                    </div>
+                    
+                    <div class="format-section">
+                        <h4>keyboard.keyEvents[]</h4>
+                        <pre>{
+  "type": "keydown|keyup",
+  "key": "a",
+  "code": "KeyA",
+  "t": 3000
+}</pre>
+                    </div>
+                    
+                    <div class="format-section">
+                        <h4>keyboard.typingMetrics</h4>
+                        <pre>{
+  "chars": 42,
+  "durationMs": 15000,
+  "cps": 2.8,        // characters per second
+  "wpm": 33,         // words per minute (5 chars = 1 word)
+  "perKeyTiming": [
+    { "code": "KeyA", "keydown": 3000, "keyup": 3100, "dwell": 100 }
+  ]
+}</pre>
+                    </div>
+                    
+                    <div class="format-section">
+                        <h4>keyboard.typedBuffer</h4>
+                        <p>Plain text string of all printable characters typed.</p>
+                    </div>
+                </div>
+            </div>
+            
+            <textarea id="jsonOutput" readonly></textarea>
+            <div class="export-actions">
+                <button id="copyJSON">Copy to Clipboard</button>
+                <button id="downloadJSON">Download JSON</button>
+                <button id="closeModal">Close</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Configuration
+        const SEGMENT_TIMEOUT = 250; // ms
+        const PALETTE = [
+            '#3498db', '#e74c3c', '#2ecc71', '#f39c12', 
+            '#9b59b6', '#1abc9c', '#e67e22', '#34495e'
+        ];
+        
+        // State
+        let isRecording = true;
+        let sessionStartTime = performance.now();
+        let lastEventTime = sessionStartTime;
+        let currentSegmentIndex = 0;
+        let currentSegment = null;
+        let segments = [];
+        let clicks = [];
+        let keyEvents = [];
+        let typedBuffer = '';
+        let typingStartTime = null;
+        let typingEndTime = null;
+        let keyTimings = {}; // Track keydown timestamps
+        let showPath = true;
+        let showClicks = true;
+        let showKeyboard = true;
+        let segmentTimeoutId = null;
+        
+        // DOM Elements
+        const captureSurface = document.getElementById('captureSurface');
+        const canvas = document.getElementById('mouseCanvas');
+        const ctx = canvas.getContext('2d');
+        const clickMarkersSvg = document.getElementById('clickMarkers');
+        const recordingIndicator = document.getElementById('recordingIndicator');
+        const recordingStatus = document.getElementById('recordingStatus');
+        const lastEventTimeEl = document.getElementById('lastEventTime');
+        const segmentColorEl = document.getElementById('segmentColor');
+        const typedBufferEl = document.getElementById('typedBuffer');
+        const charCountEl = document.getElementById('charCount');
+        const typingDurationEl = document.getElementById('typingDuration');
+        const cpsEl = document.getElementById('cps');
+        const wpmEl = document.getElementById('wpm');
+        
+        // Setup canvas
+        function resizeCanvas() {
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+            redrawCanvas();
+        }
+        
+        window.addEventListener('resize', resizeCanvas);
+        resizeCanvas();
+        
+        // Helper functions
+        function getRelativeTime() {
+            return performance.now() - sessionStartTime;
+        }
+        
+        function formatTime(ms) {
+            return (ms / 1000).toFixed(2) + 's';
+        }
+        
+        function updateStatus() {
+            const now = performance.now();
+            const elapsed = now - lastEventTime;
+            lastEventTimeEl.textContent = formatTime(elapsed);
+        }
+        
+        setInterval(updateStatus, 100);
+        
+        // Segment management
+        function startNewSegment(x, y) {
+            if (currentSegment && currentSegment.points.length > 0) {
+                currentSegment.endTime = getRelativeTime();
+                segments.push(currentSegment);
+            }
+            
+            currentSegment = {
+                id: currentSegmentIndex,
+                color: PALETTE[currentSegmentIndex % PALETTE.length],
+                startTime: getRelativeTime(),
+                endTime: null,
+                points: [{x, y, t: getRelativeTime()}]
+            };
+            
+            segmentColorEl.style.backgroundColor = currentSegment.color;
+            currentSegmentIndex++;
+        }
+        
+        function endSegment() {
+            if (currentSegment && currentSegment.points.length > 0) {
+                currentSegment.endTime = getRelativeTime();
+                segments.push(currentSegment);
+                currentSegment = null;
+            }
+        }
+        
+        // Mouse handling
+        captureSurface.addEventListener('mousemove', (e) => {
+            if (!isRecording) return;
+            
+            lastEventTime = performance.now();
+            
+            const x = e.clientX;
+            const y = e.clientY;
+            
+            // Clear segment timeout
+            if (segmentTimeoutId) {
+                clearTimeout(segmentTimeoutId);
+            }
+            
+            // Start new segment if needed
+            if (!currentSegment) {
+                startNewSegment(x, y);
+            } else {
+                currentSegment.points.push({
+                    x, y, 
+                    t: getRelativeTime()
+                });
+            }
+            
+            // Set timeout to end segment
+            segmentTimeoutId = setTimeout(() => {
+                endSegment();
+            }, SEGMENT_TIMEOUT);
+            
+            // Redraw
+            if (showPath) {
+                redrawCanvas();
+            }
+        });
+        
+        captureSurface.addEventListener('mouseleave', () => {
+            if (segmentTimeoutId) {
+                clearTimeout(segmentTimeoutId);
+            }
+            endSegment();
+            if (showPath) redrawCanvas();
+        });
+        
+        captureSurface.addEventListener('mousedown', (e) => {
+            if (!isRecording) return;
+            
+            lastEventTime = performance.now();
+            
+            const click = {
+                button: ['left', 'middle', 'right'][e.button] || 'unknown',
+                x: e.clientX,
+                y: e.clientY,
+                t: getRelativeTime(),
+                segmentId: currentSegment ? currentSegment.id : null,
+                target: e.target.tagName
+            };
+            
+            clicks.push(click);
+            
+            if (showClicks) {
+                drawClickMarker(click);
+            }
+        });
+        
+        // Prevent context menu on right-click
+        captureSurface.addEventListener('contextmenu', (e) => {
+            e.preventDefault();
+        });
+        
+        // Keyboard handling
+        // Keycap visualization
+        const keycapDisplay = document.getElementById('keycapDisplay');
+        const activeKeycaps = {};
+        const MAX_VISIBLE_KEYCAPS = 3;
+        
+        function showKeycap(key, code) {
+            // Remove existing keycap for this code if present
+            if (activeKeycaps[code]) {
+                const existing = activeKeycaps[code];
+                existing.element.remove();
+                delete activeKeycaps[code];
+            }
+            
+            // Create new keycap
+            const keycap = document.createElement('div');
+            keycap.className = 'keycap pressed active';
+            keycap.innerHTML = `
+                <span class="key-label">${escapeHtml(key)}</span>
+                <span class="key-code">${code}</span>
+            `;
+            
+            keycapDisplay.appendChild(keycap);
+            activeKeycaps[code] = {
+                element: keycap,
+                timeout: null
+            };
+            
+            // Limit visible keycaps
+            const allKeycaps = keycapDisplay.querySelectorAll('.keycap');
+            if (allKeycaps.length > MAX_VISIBLE_KEYCAPS) {
+                allKeycaps[0].remove();
+            }
+            
+            return keycap;
+        }
+        
+        function releaseKeycap(code) {
+            if (activeKeycaps[code]) {
+                const keycap = activeKeycaps[code];
+                keycap.element.classList.remove('pressed');
+                
+                // Remove after delay
+                keycap.timeout = setTimeout(() => {
+                    if (keycap.element && keycap.element.parentNode) {
+                        keycap.element.style.opacity = '0';
+                        keycap.element.style.transform = 'translateY(10px)';
+                        setTimeout(() => {
+                            if (keycap.element && keycap.element.parentNode) {
+                                keycap.element.remove();
+                            }
+                            delete activeKeycaps[code];
+                        }, 100);
+                    }
+                }, 500);
+            }
+        }
+        
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+        
+        document.addEventListener('keydown', (e) => {
+            if (!isRecording) return;
+            
+            // Check if focused on capture surface or its children
+            if (!captureSurface.contains(e.target) && e.target !== captureSurface) {
+                // Only capture if we're focused on the capture surface
+                if (e.target !== document.body) return;
+            }
+            
+            lastEventTime = performance.now();
+            
+            const eventTime = getRelativeTime();
+            
+            keyEvents.push({
+                type: 'keydown',
+                key: e.key,
+                code: e.code,
+                t: eventTime
+            });
+            
+            // Track key timing
+            keyTimings[e.code] = {
+                keydown: eventTime,
+                keyup: null
+            };
+            
+            // Show keycap visualization
+            showKeycap(e.key, e.code);
+            
+            // Handle printable characters
+            if (e.key.length === 1 && !e.ctrlKey && !e.metaKey && !e.altKey) {
+                if (!typingStartTime) {
+                    typingStartTime = eventTime;
+                }
+                typingEndTime = eventTime;
+                typedBuffer += e.key;
+                
+                updateKeyboardMetrics();
+            }
+            
+            // Handle backspace
+            if (e.key === 'Backspace') {
+                typedBuffer = typedBuffer.slice(0, -1);
+                updateKeyboardMetrics();
+            }
+        });
+        
+        document.addEventListener('keyup', (e) => {
+            if (!isRecording) return;
+            
+            const eventTime = getRelativeTime();
+            
+            keyEvents.push({
+                type: 'keyup',
+                key: e.key,
+                code: e.code,
+                t: eventTime
+            });
+            
+            // Update dwell time
+            if (keyTimings[e.code] && keyTimings[e.code].keydown) {
+                keyTimings[e.code].keyup = eventTime;
+                keyTimings[e.code].dwell = eventTime - keyTimings[e.code].keydown;
+            }
+            
+            // Release keycap visualization
+            releaseKeycap(e.code);
+        });
+        
+        function updateKeyboardMetrics() {
+            typedBufferEl.textContent = typedBuffer;
+            charCountEl.textContent = typedBuffer.length;
+            
+            if (typingStartTime && typingEndTime) {
+                const duration = (typingEndTime - typingStartTime) / 1000;
+                typingDurationEl.textContent = duration.toFixed(1) + 's';
+                
+                const cps = duration > 0 ? (typedBuffer.length / duration).toFixed(1) : 0;
+                cpsEl.textContent = cps;
+                
+                // WPM: 5 chars = 1 word
+                const words = typedBuffer.length / 5;
+                const wpm = duration > 0 ? ((words / duration) * 60).toFixed(0) : 0;
+                wpmEl.textContent = wpm;
+            }
+        }
+        
+        // Canvas drawing
+        function redrawCanvas() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            
+            if (!showPath) return;
+            
+            // Draw completed segments
+            segments.forEach(segment => {
+                drawSegment(segment);
+                
+                // Draw segment endpoints
+                if (segment.points.length > 0) {
+                    const start = segment.points[0];
+                    const end = segment.points[segment.points.length - 1];
+                    
+                    ctx.beginPath();
+                    ctx.arc(start.x, start.y, 4, 0, Math.PI * 2);
+                    ctx.fillStyle = segment.color;
+                    ctx.fill();
+                    
+                    ctx.beginPath();
+                    ctx.arc(end.x, end.y, 4, 0, Math.PI * 2);
+                    ctx.fillStyle = segment.color;
+                    ctx.fill();
+                }
+            });
+            
+            // Draw current segment
+            if (currentSegment) {
+                drawSegment(currentSegment);
+            }
+        }
+        
+        function drawSegment(segment) {
+            if (segment.points.length < 2) return;
+            
+            ctx.beginPath();
+            ctx.strokeStyle = segment.color;
+            ctx.lineWidth = 2;
+            ctx.lineCap = 'round';
+            ctx.lineJoin = 'round';
+            
+            ctx.moveTo(segment.points[0].x, segment.points[0].y);
+            
+            for (let i = 1; i < segment.points.length; i++) {
+                ctx.lineTo(segment.points[i].x, segment.points[i].y);
+            }
+            
+            ctx.stroke();
+        }
+        
+        function drawClickMarker(click) {
+            const colors = { left: '#e74c3c', middle: '#f39c12', right: '#3498db' };
+            const color = colors[click.button] || '#95a5a6';
+            
+            const g = document.createElementNS('http://www.w3.org/2000/svg', 'g');
+            g.classList.add('click-marker');
+            g.setAttribute('data-segment', click.segmentId || '');
+            
+            // Outer circle
+            const circle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+            circle.setAttribute('cx', click.x);
+            circle.setAttribute('cy', click.y);
+            circle.setAttribute('r', 12);
+            circle.setAttribute('stroke', color);
+            circle.setAttribute('fill', color);
+            circle.setAttribute('fill-opacity', '0.3');
+            g.appendChild(circle);
+            
+            // Inner dot
+            const dot = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+            dot.setAttribute('cx', click.x);
+            dot.setAttribute('cy', click.y);
+            dot.setAttribute('r', 4);
+            dot.setAttribute('fill', color);
+            g.appendChild(dot);
+            
+            // Button label
+            const text = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+            text.setAttribute('x', click.x);
+            text.setAttribute('y', click.y);
+            text.setAttribute('dy', '1');
+            text.textContent = click.button[0].toUpperCase();
+            g.appendChild(text);
+            
+            clickMarkersSvg.appendChild(g);
+            
+            // Animate
+            circle.animate([
+                { r: 0, opacity: 0 },
+                { r: 12, opacity: 1 }
+            ], {
+                duration: 200,
+                easing: 'ease-out'
+            });
+        }
+        
+        // Controls
+        document.getElementById('toggleRecording').addEventListener('click', function() {
+            isRecording = !isRecording;
+            
+            if (isRecording) {
+                this.textContent = 'Pause Recording';
+                this.classList.add('active');
+                recordingIndicator.classList.add('active');
+                recordingStatus.textContent = 'Recording: ON';
+                sessionStartTime = performance.now();
+            } else {
+                this.textContent = 'Resume Recording';
+                this.classList.remove('active');
+                recordingIndicator.classList.remove('active');
+                recordingStatus.textContent = 'Recording: PAUSED';
+                endSegment();
+            }
+        });
+        
+        document.getElementById('clearCanvas').addEventListener('click', function() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            clickMarkersSvg.innerHTML = '';
+            
+            // Clear keycaps
+            keycapDisplay.innerHTML = '';
+            Object.keys(activeKeycaps).forEach(code => {
+                if (activeKeycaps[code].timeout) {
+                    clearTimeout(activeKeycaps[code].timeout);
+                }
+                delete activeKeycaps[code];
+            });
+            
+            // Reset data
+            segments = [];
+            currentSegment = null;
+            currentSegmentIndex = 0;
+            clicks = [];
+            keyEvents = [];
+            typedBuffer = '';
+            typingStartTime = null;
+            typingEndTime = null;
+            keyTimings = {};
+            sessionStartTime = performance.now();
+            
+            typedBufferEl.textContent = '';
+            charCountEl.textContent = '0';
+            typingDurationEl.textContent = '0s';
+            cpsEl.textContent = '0';
+            wpmEl.textContent = '0';
+            segmentColorEl.style.backgroundColor = PALETTE[0];
+        });
+        
+        document.getElementById('togglePath').addEventListener('click', function() {
+            showPath = !showPath;
+            canvas.style.display = showPath ? 'block' : 'none';
+            this.textContent = showPath ? 'Hide Path' : 'Show Path';
+            this.classList.toggle('active', showPath);
+            if (showPath) redrawCanvas();
+        });
+        
+        document.getElementById('toggleClicks').addEventListener('click', function() {
+            showClicks = !showClicks;
+            clickMarkersSvg.style.display = showClicks ? 'block' : 'none';
+            this.textContent = showClicks ? 'Hide Clicks' : 'Show Clicks';
+            this.classList.toggle('active', showClicks);
+        });
+        
+        document.getElementById('toggleKeyboard').addEventListener('click', function() {
+            showKeyboard = !showKeyboard;
+            document.getElementById('keyboardPanel').style.display = showKeyboard ? 'block' : 'none';
+            document.getElementById('keycapDisplay').style.display = showKeyboard ? 'flex' : 'none';
+            this.textContent = showKeyboard ? 'Hide Keyboard Panel' : 'Show Keyboard Panel';
+            this.classList.toggle('active', showKeyboard);
+        });
+        
+        // Export functionality
+        document.getElementById('exportJSON').addEventListener('click', function() {
+            const exportData = {
+                metadata: {
+                    startTime: new Date(Date.now() - (performance.now() - sessionStartTime)).toISOString(),
+                    endTime: new Date().toISOString(),
+                    devicePixelRatio: window.devicePixelRatio,
+                    viewport: {
+                        width: window.innerWidth,
+                        height: window.innerHeight
+                    }
+                },
+                mouseSegments: segments.map(s => ({
+                    id: s.id,
+                    color: s.color,
+                    startTime: s.startTime,
+                    endTime: s.endTime,
+                    points: s.points
+                })),
+                clicks: clicks,
+                keyboard: {
+                    keyEvents: keyEvents,
+                    typedBuffer: typedBuffer,
+                    typingMetrics: {
+                        chars: typedBuffer.length,
+                        durationMs: typingEndTime && typingStartTime ? typingEndTime - typingStartTime : 0,
+                        cps: parseFloat(cpsEl.textContent) || 0,
+                        wpm: parseInt(wpmEl.textContent) || 0,
+                        perKeyTiming: Object.entries(keyTimings).map(([code, timing]) => ({
+                            code,
+                            keydown: timing.keydown,
+                            keyup: timing.keyup,
+                            dwell: timing.dwell
+                        }))
+                    }
+                }
+            };
+            
+            const jsonStr = JSON.stringify(exportData, null, 2);
+            document.getElementById('jsonOutput').value = jsonStr;
+            document.getElementById('exportModal').classList.add('active');
+        });
+        
+        document.getElementById('copyJSON').addEventListener('click', function() {
+            const jsonOutput = document.getElementById('jsonOutput');
+            jsonOutput.select();
+            document.execCommand('copy');
+            this.textContent = 'Copied!';
+            setTimeout(() => this.textContent = 'Copy to Clipboard', 2000);
+        });
+        
+        document.getElementById('downloadJSON').addEventListener('click', function() {
+            const jsonStr = document.getElementById('jsonOutput').value;
+            const blob = new Blob([jsonStr], { type: 'application/json' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `input-harness-${new Date().toISOString().replace(/[:.]/g, '-')}.json`;
+            a.click();
+            URL.revokeObjectURL(url);
+        });
+        
+        document.getElementById('closeModal').addEventListener('click', function() {
+            document.getElementById('exportModal').classList.remove('active');
+        });
+        
+        // JSON format documentation toggle
+        document.getElementById('jsonFormatHeader').addEventListener('click', function() {
+            const content = document.getElementById('jsonFormatContent');
+            const arrow = document.getElementById('formatArrow');
+            content.classList.toggle('active');
+            arrow.classList.toggle('active');
+        });
+        
+        // Screenshot functionality
+        document.getElementById('exportScreenshot').addEventListener('click', async function() {
+            const ui = document.getElementById('ui');
+            const keyboardPanel = document.getElementById('keyboardPanel');
+            
+            // Temporarily hide UI (including keycaps)
+            ui.style.display = 'none';
+            keyboardPanel.style.display = 'none';
+            keycapDisplay.style.display = 'none';
+            
+            // Wait a frame for UI to hide
+            await new Promise(resolve => requestAnimationFrame(resolve));
+            await new Promise(resolve => setTimeout(resolve, 100));
+            
+            try {
+                // Create a combined canvas
+                const combinedCanvas = document.createElement('canvas');
+                combinedCanvas.width = window.innerWidth;
+                combinedCanvas.height = window.innerHeight;
+                const combinedCtx = combinedCanvas.getContext('2d');
+                
+                // Fill with white background
+                combinedCtx.fillStyle = '#f5f5f5';
+                combinedCtx.fillRect(0, 0, combinedCanvas.width, combinedCanvas.height);
+                
+                // Draw the mouse path canvas
+                combinedCtx.drawImage(canvas, 0, 0);
+                
+                // Draw click markers
+                if (showClicks) {
+                    const svgData = new XMLSerializer().serializeToString(clickMarkersSvg);
+                    const svgBlob = new Blob([svgData], { type: 'image/svg+xml;charset=utf-8' });
+                    const url = URL.createObjectURL(svgBlob);
+                    const img = new Image();
+                    
+                    await new Promise((resolve, reject) => {
+                        img.onload = resolve;
+                        img.onerror = reject;
+                        img.src = url;
+                    });
+                    
+                    combinedCtx.drawImage(img, 0, 0);
+                    URL.revokeObjectURL(url);
+                }
+                
+                // Convert to blob
+                const blob = await new Promise(resolve => {
+                    combinedCanvas.toBlob(resolve, 'image/png');
+                });
+                
+                // Show options modal
+                const action = await showScreenshotOptions();
+                
+                if (action === 'copy') {
+                    try {
+                        await navigator.clipboard.write([
+                            new ClipboardItem({ 'image/png': blob })
+                        ]);
+                        alert('Screenshot copied to clipboard!');
+                    } catch (err) {
+                        console.error('Failed to copy:', err);
+                        alert('Failed to copy to clipboard. Try downloading instead.');
+                    }
+                } else if (action === 'download') {
+                    const url = URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.download = `input-harness-screenshot-${new Date().toISOString().replace(/[:.]/g, '-')}.png`;
+                    a.click();
+                    URL.revokeObjectURL(url);
+                }
+            } catch (err) {
+                console.error('Screenshot failed:', err);
+                alert('Failed to capture screenshot: ' + err.message);
+            } finally {
+                // Restore UI visibility
+                ui.style.display = 'block';
+                keyboardPanel.style.display = showKeyboard ? 'block' : 'none';
+                keycapDisplay.style.display = showKeyboard ? 'flex' : 'none';
+            }
+        });
+        
+        function showScreenshotOptions() {
+            return new Promise(resolve => {
+                const modal = document.createElement('div');
+                modal.style.cssText = `
+                    position: fixed;
+                    top: 0;
+                    left: 0;
+                    right: 0;
+                    bottom: 0;
+                    background: rgba(0,0,0,0.5);
+                    display: flex;
+                    justify-content: center;
+                    align-items: center;
+                    z-index: 300;
+                `;
+                
+                const content = document.createElement('div');
+                content.style.cssText = `
+                    background: white;
+                    padding: 20px;
+                    border-radius: 8px;
+                    text-align: center;
+                `;
+                
+                content.innerHTML = `
+                    <h3 style="margin-bottom: 15px;">Screenshot Captured</h3>
+                    <p style="margin-bottom: 20px; color: #666;">UI was hidden, only path and clicks are visible</p>
+                    <div style="display: flex; gap: 10px; justify-content: center;">
+                        <button id="copyScreenshot">Copy to Clipboard</button>
+                        <button id="downloadScreenshot">Download PNG</button>
+                        <button id="cancelScreenshot" style="background: #95a5a6;">Cancel</button>
+                    </div>
+                `;
+                
+                modal.appendChild(content);
+                document.body.appendChild(modal);
+                
+                modal.querySelector('#copyScreenshot').addEventListener('click', () => {
+                    document.body.removeChild(modal);
+                    resolve('copy');
+                });
+                
+                modal.querySelector('#downloadScreenshot').addEventListener('click', () => {
+                    document.body.removeChild(modal);
+                    resolve('download');
+                });
+                
+                modal.querySelector('#cancelScreenshot').addEventListener('click', () => {
+                    document.body.removeChild(modal);
+                    resolve('cancel');
+                });
+                
+                modal.addEventListener('click', (e) => {
+                    if (e.target === modal) {
+                        document.body.removeChild(modal);
+                        resolve('cancel');
+                    }
+                });
+            });
+        }
+        
+        // Auto-start
+        console.log('Input Test Harness initialized. Recording started automatically.');
+    </script>
+</body>
+</html>

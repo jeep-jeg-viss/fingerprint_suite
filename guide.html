@@ -1,0 +1,571 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Input Test Harness - LLM Guide</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            line-height: 1.6;
+            color: #333;
+            background: #f5f5f5;
+            padding: 20px;
+        }
+        
+        .container {
+            max-width: 900px;
+            margin: 0 auto;
+            background: white;
+            padding: 40px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        
+        h1 {
+            color: #2c3e50;
+            margin-bottom: 10px;
+            font-size: 32px;
+        }
+        
+        .subtitle {
+            color: #7f8c8d;
+            font-size: 18px;
+            margin-bottom: 30px;
+        }
+        
+        h2 {
+            color: #34495e;
+            margin-top: 30px;
+            margin-bottom: 15px;
+            font-size: 24px;
+            border-bottom: 2px solid #3498db;
+            padding-bottom: 10px;
+        }
+        
+        h3 {
+            color: #2c3e50;
+            margin-top: 25px;
+            margin-bottom: 12px;
+            font-size: 20px;
+        }
+        
+        h4 {
+            color: #34495e;
+            margin-top: 20px;
+            margin-bottom: 10px;
+            font-size: 16px;
+        }
+        
+        p {
+            margin-bottom: 15px;
+        }
+        
+        code {
+            background: #f4f4f4;
+            padding: 2px 6px;
+            border-radius: 3px;
+            font-family: 'Consolas', 'Monaco', monospace;
+            font-size: 0.9em;
+            color: #e74c3c;
+        }
+        
+        pre {
+            background: #2c3e50;
+            color: #ecf0f1;
+            padding: 20px;
+            border-radius: 6px;
+            overflow-x: auto;
+            margin: 15px 0;
+            font-size: 14px;
+        }
+        
+        pre code {
+            background: transparent;
+            color: inherit;
+            padding: 0;
+        }
+        
+        ul, ol {
+            margin-left: 25px;
+            margin-bottom: 15px;
+        }
+        
+        li {
+            margin-bottom: 8px;
+        }
+        
+        .back-link {
+            display: inline-block;
+            background: #3498db;
+            color: white;
+            padding: 10px 20px;
+            border-radius: 4px;
+            text-decoration: none;
+            margin-bottom: 20px;
+            transition: background 0.2s;
+        }
+        
+        .back-link:hover {
+            background: #2980b9;
+        }
+        
+        .section {
+            margin-bottom: 40px;
+        }
+        
+        .feature-box {
+            background: #ecf0f1;
+            border-left: 4px solid #3498db;
+            padding: 15px 20px;
+            margin: 15px 0;
+            border-radius: 0 4px 4px 0;
+        }
+        
+        .architecture-diagram {
+            background: #f8f9fa;
+            border: 2px dashed #bdc3c7;
+            padding: 20px;
+            margin: 20px 0;
+            text-align: center;
+            border-radius: 6px;
+        }
+        
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 15px 0;
+            font-size: 14px;
+        }
+        
+        th, td {
+            padding: 12px;
+            text-align: left;
+            border-bottom: 1px solid #ddd;
+        }
+        
+        th {
+            background: #f8f9fa;
+            font-weight: 600;
+            color: #2c3e50;
+        }
+        
+        .note {
+            background: #fff3cd;
+            border-left: 4px solid #ffc107;
+            padding: 12px 15px;
+            margin: 15px 0;
+            border-radius: 0 4px 4px 0;
+        }
+        
+        .note::before {
+            content: "Note: ";
+            font-weight: 600;
+            color: #856404;
+        }
+        
+        .highlight {
+            background: #fffacd;
+            padding: 2px 4px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <a href="index.html" class="back-link">← Back to Input Test Harness</a>
+        
+        <h1>Input Test Harness</h1>
+        <p class="subtitle">A comprehensive input capture and visualization system</p>
+        
+        <div class="section">
+            <h2>What is This?</h2>
+            <p>
+                The <strong>Input Test Harness</strong> is a browser-based tool for capturing, visualizing, and analyzing 
+                mouse and keyboard input patterns in real-time. It's designed for:
+            </p>
+            <ul>
+                <li><strong>Behavioral Analysis</strong> - Studying user interaction patterns</li>
+                <li><strong>Bot Detection Research</strong> - Identifying automated vs human input</li>
+                <li><strong>UX Testing</strong> - Understanding user navigation patterns</li>
+                <li><strong>Biometric Research</strong> - Analyzing typing dynamics and mouse kinematics</li>
+                <li><strong>Security Research</strong> - Testing input-based authentication systems</li>
+            </ul>
+        </div>
+        
+        <div class="section">
+            <h2>Architecture Overview</h2>
+            
+            <div class="architecture-diagram">
+                <pre style="text-align: left; background: transparent; color: #333;">
+┌─────────────────────────────────────────────────────────┐
+│                     BROWSER WINDOW                        │
+├─────────────────────────────────────────────────────────┤
+│  ┌─────────────────┐    ┌──────────────────┐           │
+│  │ Capture Surface │    │  Canvas Overlay  │           │
+│  │ (fullscreen)    │    │  (z-index: 10)   │           │
+│  │                 │    │                  │           │
+│  │ • Mouse moves   │    │ • Draw paths     │           │
+│  │ • Clicks        │    │ • Segments       │           │
+│  │ • Scrolls       │    │ • Real-time      │           │
+│  └────────┬────────┘    └────────┬─────────┘           │
+│           │                      │                      │
+│  ┌────────┴──────────────────────┴─────────┐           │
+│  │         Event Processing Engine           │           │
+│  │  ┌──────────┐  ┌──────────┐  ┌────────┐ │           │
+│  │  │ Segment  │  │ Timing   │  │ Metrics│ │           │
+│  │  │ Manager  │  │ Tracker  │  │ Calc   │ │           │
+│  │  └──────────┘  └──────────┘  └────────┘ │           │
+│  └──────────────────┬──────────────────────┘           │
+│                     │                                   │
+│  ┌──────────────────┴──────────────────┐              │
+│  │            Data Storage               │              │
+│  │  • segments[] - Mouse trajectories    │              │
+│  │  • clicks[] - Click events            │              │
+│  │  • keyEvents[] - Keyboard events      │              │
+│  │  • keyTimings{} - Per-key timing      │              │
+│  └──────────────────┬──────────────────┘              │
+│                     │                                   │
+│  ┌──────────────────┴──────────────────┐              │
+│  │         Visualization Layer         │              │
+│  │  ┌─────────┐ ┌─────────┐ ┌────────┐│              │
+│  │  │ Status  │ │ Keycaps │ │ Clicks ││              │
+│  │  │  Bar    │ │ Display │ │ SVG    ││              │
+│  │  └─────────┘ └─────────┘ └────────┘│              │
+│  └──────────────────────────────────────┘              │
+└─────────────────────────────────────────────────────────┘</pre>
+            </div>
+        </div>
+        
+        <div class="section">
+            <h2>Core Components</h2>
+            
+            <h3>1. Mouse Path Tracking & Segmentation</h3>
+            
+            <p>
+                The system captures mouse coordinates continuously using <code>mousemove</code> events. 
+                Movement is automatically segmented based on a configurable pause threshold (default: 250ms).
+            </p>
+            
+            <div class="feature-box">
+                <h4>Segmentation Algorithm</h4>
+                <p>
+                    Continuous movement forms a "segment". When mouse stops for <code>SEGMENT_TIMEOUT</code> ms, 
+                    the segment is finalized. Each segment gets:
+                </p>
+                <ul>
+                    <li>Unique ID (auto-incrementing)</li>
+                    <li>Color from rotating palette</li>
+                    <li>Start/end timestamps</li>
+                    <li>Array of (x, y, t) points</li>
+                </ul>
+            </div>
+            
+            <h4>Implementation Details</h4>
+            <pre><code>function startNewSegment(x, y) {
+    currentSegment = {
+        id: currentSegmentIndex,
+        color: PALETTE[currentSegmentIndex % PALETTE.length],
+        startTime: getRelativeTime(),
+        endTime: null,
+        points: [{x, y, t: getRelativeTime()}]
+    };
+}
+
+// Timeout-based segmentation
+timeoutId = setTimeout(() => {
+    endSegment();  // Close segment after 250ms pause
+}, SEGMENT_TIMEOUT);</code></pre>
+            
+            <h3>2. Click Detection & Visualization</h3>
+            
+            <p>
+                All mouse button events are captured (left/middle/right) with precise coordinates and timing. 
+                Visual markers are created using SVG elements with color-coding per button type.
+            </p>
+            
+            <table>
+                <tr>
+                    <th>Button</th>
+                    <th>Color</th>
+                    <th>Code</th>
+                </tr>
+                <tr>
+                    <td>Left</td>
+                    <td style="color: #e74c3c;">Red (#e74c3c)</td>
+                    <td><code>e.button === 0</code></td>
+                </tr>
+                <tr>
+                    <td>Middle</td>
+                    <td style="color: #f39c12;">Orange (#f39c12)</td>
+                    <td><code>e.button === 1</code></td>
+                </tr>
+                <tr>
+                    <td>Right</td>
+                    <td style="color: #3498db;">Blue (#3498db)</td>
+                    <td><code>e.button === 2</code></td>
+                </tr>
+            </table>
+            
+            <h3>3. Keyboard Capture & Metrics</h3>
+            
+            <p>
+                The system captures both <code>keydown</code> and <code>keyup</code> events to calculate:
+            </p>
+            <ul>
+                <li><strong>Characters Per Second (CPS)</strong> - Typing speed</li>
+                <li><strong>Words Per Minute (WPM)</strong> - Using 5 chars = 1 word</li>
+                <li><strong>Dwell Time</strong> - How long each key is held</li>
+                <li><strong>Keycap Visualization</strong> - Visual feedback of pressed keys</li>
+            </ul>
+            
+            <div class="note">
+                The typing metrics only count printable characters. Modifier keys (Shift, Ctrl, Alt, etc.) 
+                are tracked in <code>keyEvents[]</code> but excluded from speed calculations.
+            </div>
+            
+            <h3>4. Timing System</h3>
+            
+            <p>
+                Uses <code>performance.now()</code> for high-resolution timing (microsecond precision). 
+                All timestamps are relative to <code>sessionStartTime</code> for easier analysis:
+            </p>
+            
+            <pre><code>function getRelativeTime() {
+    return performance.now() - sessionStartTime;
+}</code></pre>
+        </div>
+        
+        <div class="section">
+            <h2>Data Export Format</h2>
+            
+            <p>
+                The JSON export contains three main data categories, all using relative timestamps (ms from session start):
+            </p>
+            
+            <h3>Mouse Segments Structure</h3>
+            <pre><code>{
+  "mouseSegments": [
+    {
+      "id": 0,                    // Segment identifier
+      "color": "#3498db",         // Visualization color
+      "startTime": 0,             // ms from session start
+      "endTime": 1250,            // segment duration
+      "points": [
+        { "x": 100, "y": 200, "t": 0 },
+        { "x": 150, "y": 250, "t": 16 },
+        // ... more points
+      ]
+    }
+  ]
+}</code></pre>
+            
+            <h3>Click Events Structure</h3>
+            <pre><code>{
+  "clicks": [
+    {
+      "button": "left",           // "left" | "middle" | "right"
+      "x": 250,                   // screen coordinates
+      "y": 300,
+      "t": 5000,                  // timestamp (ms)
+      "segmentId": 2,             // associated mouse segment
+      "target": "DIV"             // HTML element tag
+    }
+  ]
+}</code></pre>
+            
+            <h3>Keyboard Data Structure</h3>
+            <pre><code>{
+  "keyboard": {
+    "keyEvents": [
+      { "type": "keydown", "key": "a", "code": "KeyA", "t": 3000 },
+      { "type": "keyup", "key": "a", "code": "KeyA", "t": 3100 }
+    ],
+    "typedBuffer": "hello world",
+    "typingMetrics": {
+      "chars": 11,
+      "durationMs": 5000,
+      "cps": 2.2,
+      "wpm": 26,
+      "perKeyTiming": [
+        { "code": "KeyH", "keydown": 1000, "keyup": 1150, "dwell": 150 }
+      ]
+    }
+  }
+}</code></pre>
+        </div>
+        
+        <div class="section">
+            <h2>Use Cases</h2>
+            
+            <h3>1. Behavioral Biometrics</h3>
+            <p>
+                Research in behavioral biometrics uses this data to create unique user profiles based on 
+                typing rhythm, mouse movement patterns, and interaction timing. The segment-based mouse 
+                tracking captures acceleration, deceleration, and pause patterns characteristic of human vs 
+                automated input.
+            </p>
+            
+            <h3>2. Usability Testing</h3>
+            <p>
+                UX researchers can analyze mouse trajectories to identify confusion points, hesitation 
+                patterns, and inefficient navigation paths. Segment colors make it easy to spot where 
+                users pause or change direction.
+            </p>
+            
+            <h3>3. Security Analysis</h3>
+            <p>
+                Security teams use this to test bot detection systems. Human input typically shows:
+            </p>
+            <ul>
+                <li>Variable mouse velocity (not constant speed)</li>
+                <li>Bezier-curve-like trajectories (not straight lines)</li>
+                <li>Natural pauses in typing (200-300ms between words)</li>
+                <li>Variable key dwell times (50-150ms typical)</li>
+            </ul>
+            
+            <h3>4. Accessibility Research</h3>
+            <p>
+                Understanding how users with different abilities interact with interfaces. Mouse path 
+                data can reveal motor control patterns and help design more accessible input methods.
+            </p>
+        </div>
+        
+        <div class="section">
+            <h2>Technical Implementation Notes</h2>
+            
+            <h3>Canvas Rendering</h3>
+            <p>
+                Mouse paths are drawn on a dedicated canvas overlay (<code>z-index: 10</code>) separate from 
+                the click markers (SVG, <code>z-index: 20</code>). This separation allows independent 
+                toggling of path and click visibility.
+            </p>
+            
+            <h3>Event Throttling</h3>
+            <p>
+                Mouse events are captured at the browser's native rate (typically 60-120Hz depending 
+                on mouse polling rate). No artificial throttling is applied to preserve precision. 
+                However, this can generate large datasets during long sessions.
+            </p>
+            
+            <h3>Memory Management</h3>
+            <p>
+                All data is held in memory until cleared or page reload. For long capture sessions, 
+                consider periodic exports to prevent memory bloat. Typical memory usage:
+            </p>
+            <ul>
+                <li>~100 bytes per mouse point (x, y, t as numbers)</li>
+                <li>~500 bytes per key event</li>
+                <li>~1KB per click event (includes target element info)</li>
+            </ul>
+            
+            <h3>Browser Compatibility</h3>
+            <p>
+                Uses modern Web APIs:
+            </p>
+            <ul>
+                <li><code>performance.now()</code> - High-res timing (all modern browsers)</li>
+                <li><code>navigator.clipboard</code> - For screenshot copy (may require HTTPS)</li>
+                <li>Canvas API - Universal browser support</li>
+                <li>SVG - Universal browser support</li>
+            </ul>
+        </div>
+        
+        <div class="section">
+            <h2>Analysis Examples</h2>
+            
+            <h3>Calculating Mouse Velocity</h3>
+            <pre><code>function calculateVelocity(segment) {
+    const velocities = [];
+    for (let i = 1; i < segment.points.length; i++) {
+        const p1 = segment.points[i-1];
+        const p2 = segment.points[i];
+        
+        const distance = Math.sqrt(
+            Math.pow(p2.x - p1.x, 2) + 
+            Math.pow(p2.y - p1.y, 2)
+        );
+        const time = p2.t - p1.t; // ms
+        
+        velocities.push(distance / time); // pixels per ms
+    }
+    return velocities;
+}</code></pre>
+            
+            <h3>Detecting Typing Bursts</h3>
+            <pre><code>function findTypingBursts(keyEvents, burstThreshold = 100) {
+    const bursts = [];
+    let currentBurst = [];
+    
+    for (let i = 0; i < keyEvents.length; i++) {
+        if (keyEvents[i].type !== 'keydown') continue;
+        
+        if (currentBurst.length === 0) {
+            currentBurst.push(keyEvents[i]);
+        } else {
+            const last = currentBurst[currentBurst.length - 1];
+            const gap = keyEvents[i].t - last.t;
+            
+            if (gap < burstThreshold) {
+                currentBurst.push(keyEvents[i]);
+            } else {
+                if (currentBurst.length > 3) {
+                    bursts.push([...currentBurst]);
+                }
+                currentBurst = [keyEvents[i]];
+            }
+        }
+    }
+    
+    return bursts;
+}</code></pre>
+        </div>
+        
+        <div class="section">
+            <h2>Privacy & Ethics</h2>
+            
+            <p>
+                <strong>Important:</strong> This tool captures detailed behavioral data that can uniquely 
+                identify individuals (behavioral biometrics). When using for research:
+            </p>
+            
+            <ul>
+                <li>Always obtain informed consent from participants</li>
+                <li>Clearly explain what data is being captured</li>
+                <li>Store data securely and anonymize when possible</li>
+                <li>Consider GDPR/CCPA compliance for personal data</li>
+                <li>Delete data when no longer needed</li>
+            </ul>
+            
+            <div class="note">
+                This tool runs entirely client-side. No data is sent to any server unless you explicitly 
+                export and share the JSON file.
+            </div>
+        </div>
+        
+        <div class="section">
+            <h2>Getting Started</h2>
+            
+            <ol>
+                <li>Open <code>index.html</code> in any modern browser</li>
+                <li>Recording starts automatically - move your mouse and type</li>
+                <li>Watch real-time visualizations in the status bar and keycap display</li>
+                <li>Use "Export JSON" to analyze data programmatically</li>
+                <li>Use "Export Screenshot" to capture visual path analysis</li>
+                <li>Click "Clear Canvas" to reset and start fresh</li>
+            </ol>
+            
+            <p style="margin-top: 30px; padding-top: 20px; border-top: 1px solid #eee;">
+                <strong>Ready to analyze input patterns?</strong>
+                <br>
+                <a href="index.html" class="back-link" style="margin-top: 15px;">Launch Input Test Harness →</a>
+            </p>
+        </div>
+    </div>
+</body>
+</html>
