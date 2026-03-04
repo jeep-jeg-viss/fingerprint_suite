@@ -1057,45 +1057,206 @@ function setMetric(id, val, cls = '') {
   el.className = 'metric-val' + (cls ? ' ' + cls : '');
 }
 
-// ─── NETWORK FINGERPRINTING ────────────────────────────────────────────────────
+// ─── NETWORK FINGERPRINTING WITH SERVER ASSISTANCE ────────────────────────────
+let serverWS = null;
+let serverWSConnected = false;
+let serverMeasurements = {
+  rtt: [],
+  jitter: 0,
+  serverDetectedProxy: false,
+  serverDetectedIP: null,
+  tlsInfo: null
+};
+
+// Connect to Node.js WebSocket server
+function connectToServer() {
+  const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+  const wsUrl = `${wsProtocol}//${window.location.host}`;
+  
+  try {
+    serverWS = new WebSocket(wsUrl);
+    
+    serverWS.onopen = () => {
+      console.log('[Network] Connected to server');
+      serverWSConnected = true;
+      
+      // Request server network info
+      serverWS.send(JSON.stringify({ type: 'request-network-info' }));
+    };
+    
+    serverWS.onmessage = (event) => {
+      try {
+        const msg = JSON.parse(event.data);
+        
+        switch (msg.type) {
+          case 'connection':
+            console.log('[Network] Server connection established:', msg.clientId);
+            addLog('net', 'server', `Connected to server as ${msg.clientId.slice(0, 8)}...`);
+            break;
+            
+          case 'rtt-update':
+            // Server-measured RTT from WebSocket ping/pong
+            serverMeasurements.rtt.push(msg.rtt);
+            serverMeasurements.jitter = msg.jitter;
+            
+            // Keep only last 50 measurements
+            if (serverMeasurements.rtt.length > 50) {
+              serverMeasurements.rtt.shift();
+            }
+            
+            // Update display with server-measured RTT
+            const avgRtt = msg.avgRtt || Math.round(serverMeasurements.rtt.reduce((a, b) => a + b, 0) / serverMeasurements.rtt.length);
+            setMetric('n-rtt', avgRtt + 'ms (srv)');
+            setMetric('n-rttjitter', msg.jitter + 'ms');
+            
+            // Update connection profile
+            document.getElementById('cp-rtt').textContent = avgRtt + 'ms (server)';
+            break;
+            
+          case 'network-info':
+            // Server-detected network information
+            if (msg.network) {
+              serverMeasurements.serverDetectedProxy = msg.network.proxyDetected;
+              serverMeasurements.serverDetectedIP = msg.network.clientIP;
+              serverMeasurements.tlsInfo = msg.network.tls;
+              
+              // Display server-detected info
+              setMetric('n-ip', msg.network.clientIP || '—');
+              
+              // Add proxy detection anomaly if detected server-side
+              if (msg.network.proxyDetected) {
+                addAnomalyIfNew('server-proxy-detected', 'medium', 'Proxy Detected by Server',
+                  `Server detected proxy headers. Real IP: ${msg.network.clientIP}`);
+              }
+              
+              // Log TLS info if available
+              if (msg.network.tls) {
+                addLog('net', 'tls', `TLS ${msg.network.tls.version}, ${msg.network.tls.cipher}`);
+              }
+            }
+            break;
+            
+          case 'echo-response':
+            // Custom echo test result
+            const echoRtt = Date.now() - msg.clientTimestamp;
+            console.log('[Network] Echo test RTT:', echoRtt + 'ms');
+            break;
+            
+          case 'error':
+            console.error('[Network] Server error:', msg.message);
+            break;
+        }
+      } catch (e) {
+        console.error('[Network] Error parsing server message:', e);
+      }
+    };
+    
+    serverWS.onerror = (error) => {
+      console.error('[Network] WebSocket error:', error);
+      serverWSConnected = false;
+    };
+    
+    serverWS.onclose = () => {
+      console.log('[Network] Disconnected from server');
+      serverWSConnected = false;
+      
+      // Attempt reconnect after 5 seconds
+      setTimeout(connectToServer, 5000);
+    };
+    
+  } catch (e) {
+    console.error('[Network] Failed to connect:', e);
+  }
+}
+
+// Fetch server network info via HTTP API
+async function fetchServerNetworkInfo() {
+  try {
+    const response = await fetch('/api/network-info');
+    const data = await response.json();
+    
+    state.network.serverInfo = data;
+    
+    // Update display with server-provided info
+    if (data.proxy && data.proxy.detected) {
+      addAnomalyIfNew('http-proxy-detected', 'medium', 'HTTP Proxy Headers Detected',
+        `Proxy headers found: X-Forwarded-For=${data.proxy.forwardedFor || 'none'}`);
+    }
+    
+    // Log TLS info
+    if (data.connection && data.connection.tls) {
+      addLog('net', 'tls-info', `${data.connection.tls.version} / ${data.connection.tls.cipher}`);
+    }
+    
+    console.log('[Network] Server info received:', data);
+  } catch (e) {
+    console.error('[Network] Failed to fetch server info:', e);
+  }
+}
+
+let rttHistory = [];
+let customPingResults = [];
+
 function collectNavTiming() {
   try {
     const nav = performance.getEntriesByType('navigation')[0];
-    if (!nav) return;
     const t = state.network.navTiming;
-    t.dns = nav.domainLookupEnd - nav.domainLookupStart;
-    t.tcp = nav.connectEnd - nav.connectStart;
-    t.tls = nav.requestStart - nav.secureConnectionStart > 0
-      ? nav.requestStart - nav.secureConnectionStart : 0;
-    t.ttfb = nav.responseStart - nav.requestStart;
-    t.load = nav.loadEventEnd - nav.startTime;
-    t.rtt = nav.connectEnd - nav.connectStart;
+    
+    if (!nav) {
+      // Fallback to deprecated PerformanceTiming API
+      if (window.performance && window.performance.timing) {
+        const pt = performance.timing;
+        t.dns = pt.domainLookupEnd - pt.domainLookupStart;
+        t.tcp = pt.connectEnd - pt.connectStart;
+        t.tls = pt.requestStart > pt.secureConnectionStart ? 
+          pt.requestStart - pt.secureConnectionStart : 0;
+        t.ttfb = pt.responseStart - pt.requestStart;
+        t.load = pt.loadEventEnd - pt.navigationStart;
+        t.rtt = pt.connectEnd - pt.connectStart;
+      }
+    } else {
+      // Navigation Timing API v2
+      t.dns = nav.domainLookupEnd - nav.domainLookupStart;
+      t.tcp = nav.connectEnd - nav.connectStart;
+      t.tls = nav.requestStart > nav.secureConnectionStart 
+        ? nav.requestStart - nav.secureConnectionStart : 0;
+      t.ttfb = nav.responseStart - nav.requestStart;
+      t.load = nav.loadEventEnd - nav.startTime;
+      t.rtt = nav.responseEnd - nav.requestStart;
+    }
 
-    setMetric('n-rtt', t.rtt.toFixed(1) + 'ms');
-    setMetric('n-dns', t.dns.toFixed(1) + 'ms');
-    setMetric('n-tcp', t.tcp.toFixed(1) + 'ms');
+    // Check if DNS was cached or pre-resolved
+    const isDNSCached = t.dns === 0;
+    const isTCPCached = t.tcp === 0;
+    
+    // Format display values
+    const dnsDisplay = isDNSCached ? 'cached' : t.dns.toFixed(1) + 'ms';
+    const tcpDisplay = isTCPCached ? 'cached' : t.tcp.toFixed(1) + 'ms';
+    
+    setMetric('n-dns', dnsDisplay, isDNSCached ? 'ok' : '');
+    setMetric('n-tcp', tcpDisplay, isTCPCached ? 'ok' : '');
     setMetric('n-tls', t.tls.toFixed(1) + 'ms');
     setMetric('n-ttfb', t.ttfb.toFixed(1) + 'ms');
 
     // Network tab bars
-    const max = Math.max(t.dns, t.tcp, t.tls, t.ttfb, t.load, 1);
-    function setBar(id, val, label) {
+    const max = Math.max(isDNSCached ? 50 : t.dns, isTCPCached ? 50 : t.tcp, t.tls, t.ttfb, t.load, 1);
+    function setBar(id, val, label, isCached) {
       const fill = document.getElementById(id);
       const lbl = document.getElementById(label);
       if (fill) fill.style.width = Math.min(100, val/max*100) + '%';
-      if (lbl) lbl.textContent = val.toFixed(1) + 'ms';
+      if (lbl) lbl.textContent = isCached ? 'cached' : val.toFixed(1) + 'ms';
     }
-    setBar('nb-dns-fill', t.dns, 'nv-dns');
-    setBar('nb-tcp-fill', t.tcp, 'nv-tcp');
-    setBar('nb-tls-fill', t.tls, 'nv-tls');
-    setBar('nb-ttfb-fill', t.ttfb, 'nv-ttfb');
-    setBar('nb-load-fill', t.load, 'nv-load');
+    setBar('nb-dns-fill', isDNSCached ? 50 : t.dns, 'nv-dns', isDNSCached);
+    setBar('nb-tcp-fill', isTCPCached ? 50 : t.tcp, 'nv-tcp', isTCPCached);
+    setBar('nb-tls-fill', t.tls, 'nv-tls', false);
+    setBar('nb-ttfb-fill', t.ttfb, 'nv-ttfb', false);
+    setBar('nb-load-fill', t.load, 'nv-load', false);
     document.getElementById('nv-load').textContent = t.load.toFixed(1) + 'ms';
 
-    // Anomaly: unusually low DNS (suggests DNS cache or headless)
-    if (t.dns < 1 && t.dns >= 0) {
-      addAnomalyIfNew('dns-instant', 'medium', 'Instant DNS Resolution',
-        `DNS resolved in ${t.dns.toFixed(2)}ms. Headless browsers & proxies often have pre-cached DNS, bypassing normal resolver latency.`);
+    // Anomaly: cached DNS/TCP could indicate pre-optimization
+    if (isDNSCached && isTCPCached) {
+      addAnomalyIfNew('dns-tcp-cached', 'low', 'Connection Fully Cached',
+        'Both DNS and TCP connections were pre-cached. This may indicate a proxy/VPN, repeated visits, or browser pre-optimization.');
     }
     // Anomaly: RTT/TLS mismatch suggesting VPN
     if (t.tls > 0 && t.tcp > 0 && t.tls / t.tcp > 3) {
@@ -1105,18 +1266,65 @@ function collectNavTiming() {
   } catch(e) {}
 }
 
+// Perform actual ping test using server API
+async function measureServerPing() {
+  try {
+    const start = performance.now();
+    const response = await fetch('/api/ping?t=' + Date.now(), {
+      cache: 'no-store'
+    });
+    const end = performance.now();
+    const data = await response.json();
+    
+    const rtt = end - start;
+    console.log('[Network] Server ping RTT:', rtt + 'ms');
+    
+    return {
+      rtt: rtt,
+      serverTime: data.timestamp,
+      encrypted: data.connection?.encrypted || false
+    };
+  } catch (e) {
+    console.error('[Network] Server ping failed:', e);
+    return null;
+  }
+}
+
 function collectResourceTiming() {
-  const entries = performance.getEntriesByType('resource').slice(-5);
+  const entries = performance.getEntriesByType('resource').slice(-10);
   state.network.resources = entries;
   const list = document.getElementById('res-timing-list');
-  if (!entries.length) { list.innerHTML = '<div class="no-data">No resources</div>'; return; }
+  if (!entries.length) { list.innerHTML = '<div class="no-data">No resources loaded yet</div>'; return; }
+  
+  // Calculate RTT from resource timings
+  let rttSum = 0;
+  let rttCount = 0;
+  
   list.innerHTML = entries.map(r => {
-    const dns = (r.domainLookupEnd - r.domainLookupStart).toFixed(0);
-    const tcp = (r.connectEnd - r.connectStart).toFixed(0);
-    const ttfb = (r.responseStart - r.requestStart).toFixed(0);
+    const dns = r.domainLookupEnd - r.domainLookupStart;
+    const tcp = r.connectEnd - r.connectStart;
+    const ttfb = r.responseStart - r.requestStart;
+    const total = r.responseEnd - r.startTime;
     const name = r.name.split('/').pop().split('?')[0].slice(0,22);
-    return `<div class="metric-row"><span class="metric-label" title="${r.name}">${name}</span><span class="metric-val">ttfb:${ttfb}ms</span></div>`;
+    
+    // Track RTT from resources (response time minus server processing)
+    if (ttfb > 0 && ttfb < 5000) {
+      rttSum += ttfb;
+      rttCount++;
+    }
+    
+    const dnsDisplay = dns === 0 ? 'cached' : dns.toFixed(0) + 'ms';
+    const tcpDisplay = tcp === 0 ? 'cached' : tcp.toFixed(0) + 'ms';
+    
+    return `<div class="metric-row"><span class="metric-label" title="${r.name}">${name}</span><span class="metric-val">${dnsDisplay}/${tcpDisplay}/${ttfb.toFixed(0)}ms</span></div>`;
   }).join('');
+  
+  // Only use resource timing if no server measurements available
+  if (rttCount > 0 && serverMeasurements.rtt.length === 0 && state.network.navTiming.rtt === 0) {
+    const avgRTT = rttSum / rttCount;
+    state.network.estimatedRTT = avgRTT;
+    setMetric('n-rtt', avgRTT.toFixed(1) + 'ms (est)');
+  }
 }
 
 function collectConnectionInfo() {
@@ -1134,6 +1342,11 @@ function collectConnectionInfo() {
     document.getElementById('cp-rtt').textContent = c.rtt + 'ms';
     document.getElementById('cp-dl').textContent = c.downlink + ' Mbps';
     document.getElementById('cp-save').textContent = c.saveData ? 'YES' : 'no';
+    
+    // Use server RTT as primary, fallback to Network API only if no server
+    if (serverMeasurements.rtt.length === 0 && state.network.navTiming.rtt === 0 && typeof c.rtt === 'number') {
+      setMetric('n-rtt', c.rtt + 'ms (net API)');
+    }
 
     // suspicious: datacenter-like very low rtt but high-speed downlink
     if (c.rtt <= 10 && c.downlink >= 10) {
@@ -1142,6 +1355,34 @@ function collectConnectionInfo() {
     }
   } else {
     setMetric('n-conntype', 'API N/A');
+  }
+}
+
+// Calculate RTT jitter from measurements
+function updateRTTJitter() {
+  const measurements = serverMeasurements.rtt.length > 0 ? serverMeasurements.rtt : rttHistory;
+  
+  if (measurements.length < 2) {
+    setMetric('n-rttjitter', '—');
+    return;
+  }
+  
+  const mean = measurements.reduce((a, b) => a + b, 0) / measurements.length;
+  const variance = measurements.reduce((sum, val) => sum + Math.pow(val - mean, 2), 0) / measurements.length;
+  const jitter = Math.sqrt(variance);
+  setMetric('n-rttjitter', jitter.toFixed(1) + 'ms');
+}
+
+// Run server-assisted ping test
+async function runServerPingTest() {
+  const result = await measureServerPing();
+  if (result) {
+    if (!serverMeasurements.rtt.length) {
+      // First measurement, update display
+      setMetric('n-rtt', result.rtt.toFixed(1) + 'ms (srv)');
+    }
+    serverMeasurements.rtt.push(result.rtt);
+    if (serverMeasurements.rtt.length > 50) serverMeasurements.rtt.shift();
   }
 }
 
@@ -1702,6 +1943,7 @@ setInterval(() => {
   computeRiskScore();
   updateVelSparkline();
   updateFlightSparkline();
+  updateRTTJitter();
 }, 1000);
 
 // ─── INIT ─────────────────────────────────────────────────────────────────────
@@ -1710,6 +1952,26 @@ window.addEventListener('load', () => {
   collectConnectionInfo();
   collectEnvironment();
   probeWebRTC();
+  
+  // Connect to Node.js server for accurate network measurements
+  connectToServer();
+  
+  // Fetch server network info
+  setTimeout(() => {
+    fetchServerNetworkInfo();
+  }, 1000);
+  
+  // Run server ping test
+  setTimeout(() => {
+    runServerPingTest();
+  }, 2000);
+  
+  // Periodic server ping tests for ongoing RTT measurement
+  setInterval(() => {
+    if (!serverWSConnected) {
+      runServerPingTest();
+    }
+  }, 5000);
 });
 
 // initial score render

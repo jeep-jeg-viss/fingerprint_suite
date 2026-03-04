@@ -1,0 +1,26 @@
+{
+  "name": "fingerprinter",
+  "version": "2.0.0",
+  "description": "Advanced Anti-Bot Research Harness with Node.js backend for accurate network signal detection",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node --watch server.js"
+  },
+  "dependencies": {
+    "express": "^4.18.2",
+    "ws": "^8.14.2"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "keywords": [
+    "bot-detection",
+    "fingerprinting",
+    "network-analysis",
+    "anti-bot",
+    "security"
+  ],
+  "author": "",
+  "license": "MIT"
+}
